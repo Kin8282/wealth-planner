@@ -1,0 +1,1854 @@
+/* ========================================
+   WEALTH STRATEGY PLANNER — APPLICATION
+   ======================================== */
+
+// ============ CONSTANTS & STATE ============
+const FED_LTCG_RATE = 0.20;
+const NIIT_RATE = 0.038;
+const BASE_CAP_GAINS_RATE = FED_LTCG_RATE + NIIT_RATE; // 23.8%
+
+// Current university costs (2024-2025, source: College Board)
+const UNIVERSITY_COSTS = {
+  'public-in':  { annual: 23_250, label: 'Public In-State', tuitionOnly: 11_260 },
+  'public-out': { annual: 41_920, label: 'Public Out-of-State', tuitionOnly: 29_150 },
+  'private':    { annual: 58_600, label: 'Private University', tuitionOnly: 42_160 },
+  'elite':      { annual: 82_000, label: 'Elite / Ivy-Level', tuitionOnly: 62_000 },
+};
+const COLLEGE_INFLATION = 0.05; // ~5% annual increase
+const COLLEGE_YEARS = 4;
+
+// Chart instances
+let radarChart, projectionChart, taxDragChart, taxBarChart, eduChart, playbookChart;
+let mcExchangeChart, mcSellChart, sensitivityChart;
+let incomeChart, breakevenChart, cumulativeIncomeChart;
+let relocationChart;
+
+// ============ STRATEGIES ============
+function buildStrategies(stockValue, costBasis, capGainsRate) {
+  const gain = Math.max(0, stockValue - costBasis);
+  const taxIfSold = Math.round(gain * capGainsRate);
+  const afterTax = stockValue - taxIfSold;
+  const crtDeduction = Math.round(stockValue * 0.25); // ~25% charitable deduction
+
+  return {
+    sell: {
+      name: 'Sell & Reinvest',
+      color: '#ef4444',
+      icon: '💸',
+      taxNow: taxIfSold,
+      afterTax: afterTax,
+      capitalDeployed: afterTax,
+      returnMultiplier: 1,
+      tagline: 'Pay now, reinvest freely',
+      pros: [
+        'Immediate full diversification',
+        'Full liquidity — access anytime',
+        'Simplest option to execute',
+        'No restrictions on investment choices',
+      ],
+      cons: [
+        `~$${(taxIfSold/1000).toFixed(0)}K capital gains tax immediately`,
+        'Significant opportunity cost from lost capital',
+        'No legacy or charitable benefit',
+      ],
+    },
+    crt: {
+      name: 'Charitable Remainder Trust',
+      color: '#10b981',
+      icon: '🏛️',
+      taxNow: 0,
+      afterTax: stockValue,
+      capitalDeployed: stockValue,
+      returnMultiplier: 0.94, // slightly less due to payout requirement
+      tagline: 'Donate, defer tax, receive income',
+      pros: [
+        'Zero capital gains on sale inside trust',
+        `~$${(crtDeduction/1000).toFixed(0)}K immediate tax deduction`,
+        'Income stream of 5-8% annually for life',
+        'Strong charitable legacy and impact',
+        'Reduces estate tax exposure',
+      ],
+      cons: [
+        'Remaining assets go to charity at death',
+        'Irrevocable — cannot change terms',
+        'Annual payout requirement (5-50%)',
+        'Complex setup and admin costs',
+      ],
+    },
+    exchange: {
+      name: 'Exchange Fund',
+      color: '#6366f1',
+      icon: '🔄',
+      taxNow: 0,
+      afterTax: stockValue,
+      capitalDeployed: stockValue,
+      returnMultiplier: 0.935, // ~0.65% fee drag
+      tagline: 'Pool stocks, defer indefinitely',
+      pros: [
+        'Zero taxes — indefinite deferral',
+        'Instant diversification into 20-30 stocks',
+        'Full principal preserved & compounding',
+        'No charity required — keep everything',
+      ],
+      cons: [
+        'Mandatory 7-year lock-up period',
+        'Limited fund selection & availability',
+        'Accredited investor required ($5M+ net worth typical)',
+        '~1-1.5% annual management fees',
+      ],
+    },
+    dso: {
+      name: 'Deferred Sales Trust',
+      color: '#f59e0b',
+      icon: '📋',
+      taxNow: 0,
+      afterTax: stockValue,
+      capitalDeployed: stockValue,
+      returnMultiplier: 0.97, // some interest cost
+      tagline: 'Sell now, spread tax over decades',
+      pros: [
+        'Tax payments spread over 10-30 years',
+        'Full investment flexibility retained',
+        'No charity commitment required',
+        'You control how proceeds are invested',
+      ],
+      cons: [
+        'IRS scrutiny — must be impeccably structured',
+        'Complex setup costs ($20K–$50K in legal/advisory fees)',
+        'Interest owed on deferred tax balance',
+        'Need qualified DST attorney',
+      ],
+    },
+    ozone: {
+      name: 'Opportunity Zone Fund',
+      color: '#8b5cf6',
+      icon: '🏙️',
+      taxNow: 0,
+      afterTax: stockValue,
+      capitalDeployed: stockValue,
+      returnMultiplier: 1.1, // higher target return (real estate/development)
+      tagline: 'Defer gains + eliminate future growth tax',
+      pros: [
+        'Defer original capital gains',
+        'Future gains eliminated after 10-year hold',
+        'Double tax benefit (deferral + exclusion)',
+        'High upside in developing markets',
+      ],
+      cons: [
+        'Illiquid — 10-year minimum hold',
+        'Real estate & development risk',
+        'Market/location dependent returns',
+        'Limited established track records',
+      ],
+    },
+    collar: {
+      name: 'Hedged Collar + Loan',
+      color: '#0ea5e9',
+      icon: '🔒',
+      taxNow: 0,
+      afterTax: stockValue,
+      capitalDeployed: stockValue,
+      returnMultiplier: 0.92, // capped upside & loan interest drag
+      tagline: 'Protect value, borrow against it',
+      pros: [
+        'No taxable event at all',
+        `Access $${(stockValue * 0.7 / 1000).toFixed(0)}K–$${(stockValue * 0.8 / 1000).toFixed(0)}K via margin loan`,
+        'Downside fully protected via put option',
+        'Can invest borrowed proceeds freely',
+      ],
+      cons: [
+        'Interest on margin loan (~5-7% annually)',
+        'Upside capped by call option',
+        'Requires sophisticated broker (Goldman, Morgan Stanley)',
+        'Complex derivatives maintenance',
+      ],
+    },
+  };
+}
+
+const radarMetrics = [
+  { subject: 'Tax Efficiency',  sell: 2,  crt: 9,  exchange: 10, dso: 7, ozone: 8,  collar: 9  },
+  { subject: 'Liquidity',       sell: 10, crt: 5,  exchange: 3,  dso: 7, ozone: 2,  collar: 8  },
+  { subject: 'Simplicity',      sell: 10, crt: 5,  exchange: 6,  dso: 4, ozone: 5,  collar: 4  },
+  { subject: 'Legacy / Impact', sell: 3,  crt: 10, exchange: 4,  dso: 3, ozone: 6,  collar: 3  },
+  { subject: 'Return Potential', sell: 7,  crt: 6,  exchange: 8,  dso: 8, ozone: 9,  collar: 6  },
+  { subject: 'Control',         sell: 10, crt: 4,  exchange: 5,  dso: 8, ozone: 6,  collar: 7  },
+];
+
+const taxIdeas = [
+  {
+    title: '🏦 Step-Up in Basis at Death',
+    color: '#6366f1',
+    desc: 'Hold concentrated stock until death. Heirs receive full step-up in cost basis — eliminating ALL capital gains tax permanently. This is the ultimate "do nothing" strategy.',
+    impact: 'Eliminates entire tax liability',
+    caveat: 'Must hold stock and accept concentration risk. Estate tax may apply for estates >$13.6M.',
+  },
+  {
+    title: '📉 Tax-Loss Harvesting',
+    color: '#10b981',
+    desc: 'Offset the capital gain by selling other losing positions in your portfolio. Each $1 of realized losses cancels $1 of gains. Direct indexing can harvest losses daily.',
+    impact: 'Up to full gain offset',
+    caveat: 'Requires existing losing positions. Be careful of 30-day wash-sale rules.',
+  },
+  {
+    title: '🎁 Gifting to Family Members',
+    color: '#f59e0b',
+    desc: 'Gift $18K/year per person tax-free (2024). Gift to children in lower tax brackets — 0% capital gains rate applies under ~$47K income. Can use lifetime exemption for larger gifts.',
+    impact: '0% tax rate on gains',
+    caveat: 'Annual limit $18K or must use lifetime exemption ($13.6M). Complex for $1M positions.',
+  },
+  {
+    title: '🏥 Donor-Advised Fund (DAF)',
+    color: '#8b5cf6',
+    desc: 'Contribute appreciated stock to a DAF for an immediate tax deduction at full market value. No capital gains tax on the appreciation. Recommend grants to charities over time.',
+    impact: 'Full deduction + zero cap gains',
+    caveat: 'Funds must go to charity eventually. Cannot personally benefit from DAF assets.',
+  },
+  {
+    title: '📊 Direct Indexing',
+    color: '#0ea5e9',
+    desc: 'Build a custom index of 200-500 individual stocks. Algorithmic daily tax-loss harvesting generates losses to offset your concentrated stock gains. Offered by Parametric, Vanguard, Fidelity.',
+    impact: '2-5% annual tax alpha',
+    caveat: 'Requires $500K+ typically. May not fully offset a $900K gain in year one.',
+  },
+  {
+    title: '🔐 Installment Sale to IDIT',
+    color: '#f43f5e',
+    desc: 'Sell stock to an Intentionally Defective Irrevocable Trust in exchange for a promissory note. Freezes value for estate tax purposes while deferring capital gains recognition.',
+    impact: 'Estate freeze + gain deferral',
+    caveat: 'Requires existing trust with seed capital (usually 10% of sale). Complex legal setup.',
+  },
+];
+
+const newInvestmentIdeas = [
+  {
+    title: 'Private Placement Life Insurance (PPLI)',
+    desc: 'Wrap your investment portfolio inside a life insurance policy. All growth is tax-deferred; proceeds pass to heirs income-tax free. Can hold alternative investments. Minimum $1M+ premium.',
+    tag: 'Ultra-HNW',
+  },
+  {
+    title: 'GRAT (Grantor Retained Annuity Trust)',
+    desc: 'Transfer future stock appreciation to heirs with zero gift tax. If the stock grows above the IRS hurdle rate (~5.4% in 2024), heirs keep the excess tax-free. Perfect for high-growth stocks.',
+    tag: 'Wealth Transfer',
+  },
+  {
+    title: 'Non-Grantor Charitable Lead Trust (CLT)',
+    desc: 'Trust pays a stream to charity for a set term, then remaining assets pass to your heirs gift-tax free. Excellent when interest rates are low. Double benefit: charitable + wealth transfer.',
+    tag: 'Estate Planning',
+  },
+  {
+    title: 'Synthetic Equity via Total Return Swap',
+    desc: 'Swap the economic exposure of your concentrated stock for a diversified portfolio return. No tax event triggered. Maintains stock ownership on paper. Used by ultra-HNW families.',
+    tag: 'Advanced',
+  },
+  {
+    title: 'Qualified Small Business Stock (QSBS)',
+    desc: 'If your stock qualifies under Section 1202 (C-corp, held 5+ years, acquired at founding), you can exclude up to $10M or 10x basis of capital gains. 100% federal exclusion.',
+    tag: 'Startup Founders',
+  },
+  {
+    title: 'Municipal Bond Portfolio',
+    desc: 'Reinvest proceeds into high-quality municipal bonds for tax-exempt income. Yields of 4-5% are equivalent to 6.5-8% pre-tax for top bracket investors. Ideal for income-focused retirees.',
+    tag: 'Tax-Free Income',
+  },
+  {
+    title: 'Cryptocurrency via Opportunity Zone',
+    desc: 'Roll crypto gains into an Opportunity Zone fund for deferral + future gain elimination. Works for any capital gains, not just stock. 10-year hold eliminates growth taxation.',
+    tag: 'Crypto Strategy',
+  },
+  {
+    title: 'Real Estate Cost Segregation',
+    desc: 'Purchase income property and accelerate depreciation via cost segregation study. Generate paper losses to offset stock gains. Bonus depreciation allows 60-80% first-year write-off.',
+    tag: 'Real Estate',
+  },
+];
+
+const eduTips = [
+  {
+    title: 'Superfunding a 529',
+    desc: 'Contribute up to 5 years of annual gift exclusions at once ($90K individual / $180K couple in 2024). Jump-start compounding with one large deposit from your stock gains.',
+    tag: 'Max Growth',
+  },
+  {
+    title: '529 to Roth IRA Rollover',
+    desc: 'Starting 2024, unused 529 funds can roll into a beneficiary Roth IRA (15-year account age required, $35K lifetime limit). Eliminates the "overfunding" risk completely.',
+    tag: 'New Rule',
+  },
+  {
+    title: 'State Tax Deduction',
+    desc: 'Over 30 states offer income tax deductions for 529 contributions. Your state may allow $10K-$20K+ in annual deductions — effectively a guaranteed return on contributions.',
+    tag: 'Tax Savings',
+  },
+  {
+    title: 'Use Appreciated Stock for 529',
+    desc: 'Sell a portion of your concentrated stock, pay capital gains, then contribute the proceeds to a 529. Or use charitable deductions from a CRT to offset the gains from the sale.',
+    tag: 'Strategy Combo',
+  },
+  {
+    title: 'Age-Based vs. Static Allocation',
+    desc: 'For younger children (0-10), use aggressive equity allocations for maximum growth. Switch to conservative bond-heavy funds as college approaches. Most plans offer automatic glide paths.',
+    tag: 'Investment',
+  },
+  {
+    title: 'Multiple 529 Accounts Strategy',
+    desc: 'Open separate 529 accounts for each child. You can also change beneficiaries between family members. Grandparent-owned 529s no longer count against financial aid (as of 2024 FAFSA).',
+    tag: 'Planning',
+  },
+];
+
+// ============ HELPER FUNCTIONS ============
+function fmt(n) {
+  if (Math.abs(n) >= 1_000_000) return '$' + (n / 1_000_000).toFixed(2) + 'M';
+  if (Math.abs(n) >= 1_000) return '$' + (n / 1_000).toFixed(0) + 'K';
+  return '$' + n.toFixed(0);
+}
+
+function fmtFull(n) {
+  return '$' + Math.round(n).toLocaleString('en-US');
+}
+
+function getInputs() {
+  const stockValue   = parseFloat(document.getElementById('stockValue').value) || 1_000_000;
+  const costBasis    = parseFloat(document.getElementById('costBasis').value) || 0;
+  const annualReturn = (parseFloat(document.getElementById('annualReturn').value) || 7) / 100;
+  const timeHorizon  = parseInt(document.getElementById('timeHorizon').value) || 20;
+  const taxBracket   = parseFloat(document.getElementById('taxBracket').value) || 0.37;
+  const stateRate    = (parseFloat(document.getElementById('stateRate').value) || 0) / 100;
+  const capGainsRate = BASE_CAP_GAINS_RATE + stateRate;
+
+  return { stockValue, costBasis, annualReturn, timeHorizon, taxBracket, stateRate, capGainsRate };
+}
+
+function getEduInputs() {
+  return {
+    balance:       parseFloat(document.getElementById('edu529Balance').value) || 0,
+    monthly:       parseFloat(document.getElementById('eduMonthlyContrib').value) || 0,
+    childAge:      parseInt(document.getElementById('eduChildAge').value) || 8,
+    childCount:    parseInt(document.getElementById('eduChildCount').value) || 1,
+    uniType:       document.getElementById('eduType').value || 'public-in',
+    returnRate:    (parseFloat(document.getElementById('edu529Return').value) || 6) / 100,
+  };
+}
+
+function projectWealth(initial, rate, years) {
+  return Array.from({ length: years + 1 }, (_, i) => ({
+    year: i,
+    value: Math.round(initial * Math.pow(1 + rate, i)),
+  }));
+}
+
+// ============ UPDATE LIVE SUMMARY ============
+function updateLiveSummary() {
+  const { stockValue, costBasis, capGainsRate, stateRate } = getInputs();
+  const gain = Math.max(0, stockValue - costBasis);
+  const fedTax = Math.round(gain * BASE_CAP_GAINS_RATE);
+  const stateTax = Math.round(gain * stateRate);
+  const totalTax = fedTax + stateTax;
+  const afterTax = stockValue - totalTax;
+
+  document.getElementById('unrealizedGain').textContent = fmtFull(gain);
+  document.getElementById('fedTax').textContent = fmtFull(fedTax);
+  document.getElementById('stateTax').textContent = fmtFull(stateTax);
+  document.getElementById('totalTax').textContent = fmtFull(totalTax);
+  document.getElementById('afterTax').textContent = fmtFull(afterTax);
+}
+
+// ============ TAB SWITCHING ============
+function initTabs() {
+  const buttons = document.querySelectorAll('.tab-btn');
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      buttons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel-' + tab).classList.add('active');
+      rebuildCurrentTab(tab);
+    });
+  });
+}
+
+function rebuildCurrentTab(tab) {
+  switch(tab) {
+    case 'strategies': renderStrategies(); renderRadarChart(); break;
+    case 'roi': renderROI(); break;
+    case 'montecarlo': renderMonteCarlo(); break;
+    case 'income': renderIncomeBreakeven(); break;
+    case 'tax': renderTaxTab(); break;
+    case 'relocation': renderRelocation(); break;
+    case 'education': renderEducation(); break;
+    case 'playbook': renderPlaybook(); break;
+  }
+}
+
+// ============ RENDER: STRATEGIES TAB ============
+function renderStrategies() {
+  const { stockValue, costBasis, capGainsRate } = getInputs();
+  const strategies = buildStrategies(stockValue, costBasis, capGainsRate);
+  const grid = document.getElementById('strategies-grid');
+  
+  grid.innerHTML = Object.entries(strategies).map(([key, s], i) => `
+    <div class="strategy-card animate-in stagger-${i + 1}" style="--card-color: ${s.color};" onclick="selectAndGoCompare('${key}')">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${s.color};opacity:0;" class="card-accent"></div>
+      <div class="strategy-card-header">
+        <span class="strategy-icon">${s.icon}</span>
+        <div>
+          <div class="strategy-name">${s.name}</div>
+          <div class="strategy-tagline">${s.tagline}</div>
+        </div>
+      </div>
+      <div class="strategy-stats">
+        <div class="stat-box">
+          <div class="stat-label">Tax Now</div>
+          <div class="stat-value" style="color: ${s.taxNow === 0 ? '#10b981' : '#ef4444'}">
+            ${s.taxNow === 0 ? '$0' : '−' + fmt(s.taxNow)}
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Capital Deployed</div>
+          <div class="stat-value" style="color: var(--text-primary)">${fmt(s.capitalDeployed)}</div>
+        </div>
+      </div>
+      <span class="strategy-tag" style="background: ${s.taxNow === 0 ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}; color: ${s.taxNow === 0 ? '#10b981' : '#ef4444'}">
+        ${s.taxNow === 0 ? '✓ Zero Tax Now' : '⚠ Tax Due'}
+      </span>
+      <div class="strategy-pros">
+        <div class="strategy-pros-title">✅ Advantages</div>
+        ${s.pros.slice(0, 3).map(p => `
+          <div class="strategy-list-item">
+            <span class="bullet" style="color:#10b981">▸</span>
+            <p>${p}</p>
+          </div>
+        `).join('')}
+      </div>
+      <div class="strategy-cons">
+        <div class="strategy-cons-title">⚠️ Watch Outs</div>
+        ${s.cons.slice(0, 2).map(c => `
+          <div class="strategy-list-item">
+            <span class="bullet" style="color:#ef4444">▸</span>
+            <p>${c}</p>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  // Add hover effects
+  grid.querySelectorAll('.strategy-card').forEach(card => {
+    const accent = card.querySelector('.card-accent');
+    card.addEventListener('mouseenter', () => { if (accent) accent.style.opacity = '1'; });
+    card.addEventListener('mouseleave', () => { if (accent) accent.style.opacity = '0'; });
+  });
+}
+
+function selectAndGoCompare(key) {
+  // Stub — keeps on strategies tab but useful for future drill-down
+}
+
+// ============ RENDER: RADAR CHART ============
+function renderRadarChart() {
+  const ctx = document.getElementById('radarChart');
+  if (!ctx) return;
+  if (radarChart) radarChart.destroy();
+
+  radarChart = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: radarMetrics.map(m => m.subject),
+      datasets: [
+        {
+          label: 'Exchange Fund',
+          data: radarMetrics.map(m => m.exchange),
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99,102,241,0.12)',
+          borderWidth: 2,
+          pointBackgroundColor: '#6366f1',
+          pointRadius: 3,
+        },
+        {
+          label: 'Charitable Trust',
+          data: radarMetrics.map(m => m.crt),
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16,185,129,0.08)',
+          borderWidth: 2,
+          pointBackgroundColor: '#10b981',
+          pointRadius: 3,
+        },
+        {
+          label: 'Sell & Reinvest',
+          data: radarMetrics.map(m => m.sell),
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239,68,68,0.06)',
+          borderWidth: 2,
+          pointBackgroundColor: '#ef4444',
+          pointRadius: 3,
+        },
+        {
+          label: 'Opp Zone',
+          data: radarMetrics.map(m => m.ozone),
+          borderColor: '#8b5cf6',
+          backgroundColor: 'rgba(139,92,246,0.06)',
+          borderWidth: 2,
+          pointBackgroundColor: '#8b5cf6',
+          pointRadius: 3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        r: {
+          beginAtZero: true,
+          max: 10,
+          ticks: { display: false },
+          grid: { color: '#1e293b' },
+          angleLines: { color: '#1e293b' },
+          pointLabels: {
+            color: '#94a3b8',
+            font: { size: 11, family: 'Inter' },
+          },
+        },
+      },
+      plugins: {
+        legend: {
+          labels: { color: '#94a3b8', font: { size: 11 }, padding: 16, usePointStyle: true },
+        },
+      },
+    },
+  });
+}
+
+// ============ RENDER: ROI TAB ============
+function renderROI() {
+  const { stockValue, costBasis, annualReturn, timeHorizon, capGainsRate } = getInputs();
+  const strategies = buildStrategies(stockValue, costBasis, capGainsRate);
+
+  // Build projection data
+  const projData = Array.from({ length: timeHorizon + 1 }, (_, i) => i);
+
+  const datasets = [
+    {
+      label: 'Sell & Reinvest',
+      data: projData.map(yr => Math.round(strategies.sell.afterTax * Math.pow(1 + annualReturn, yr))),
+      borderColor: '#ef4444',
+      backgroundColor: 'rgba(239,68,68,0.05)',
+      fill: false,
+      borderWidth: 2,
+      tension: 0.3,
+      pointRadius: 0,
+    },
+    {
+      label: 'Exchange Fund',
+      data: projData.map(yr => Math.round(stockValue * Math.pow(1 + annualReturn * 0.935, yr))),
+      borderColor: '#6366f1',
+      backgroundColor: 'rgba(99,102,241,0.08)',
+      fill: true,
+      borderWidth: 2.5,
+      tension: 0.3,
+      pointRadius: 0,
+    },
+    {
+      label: 'Charitable Trust',
+      data: projData.map(yr => Math.round(stockValue * Math.pow(1 + annualReturn * 0.94, yr))),
+      borderColor: '#10b981',
+      backgroundColor: 'rgba(16,185,129,0.05)',
+      fill: false,
+      borderWidth: 2,
+      tension: 0.3,
+      pointRadius: 0,
+    },
+    {
+      label: 'Opportunity Zone',
+      data: projData.map(yr => {
+        const val = stockValue * Math.pow(1 + annualReturn * 1.1, yr);
+        return Math.round(yr >= 10 ? val * 0.95 : val);
+      }),
+      borderColor: '#8b5cf6',
+      backgroundColor: 'rgba(139,92,246,0.05)',
+      fill: false,
+      borderWidth: 2,
+      tension: 0.3,
+      borderDash: [5, 3],
+      pointRadius: 0,
+    },
+    {
+      label: 'Deferred Sales Trust',
+      data: projData.map(yr => Math.round(stockValue * Math.pow(1 + annualReturn * 0.97, yr))),
+      borderColor: '#f59e0b',
+      backgroundColor: 'rgba(245,158,11,0.05)',
+      fill: false,
+      borderWidth: 2,
+      tension: 0.3,
+      pointRadius: 0,
+    },
+    {
+      label: 'Collar + Loan',
+      data: projData.map(yr => Math.round(stockValue * Math.pow(1 + annualReturn * 0.92, yr))),
+      borderColor: '#0ea5e9',
+      backgroundColor: 'rgba(14,165,233,0.05)',
+      fill: false,
+      borderWidth: 2,
+      tension: 0.3,
+      borderDash: [3, 3],
+      pointRadius: 0,
+    },
+  ];
+
+  // Projection Chart
+  const projCtx = document.getElementById('projectionChart');
+  if (projCtx) {
+    if (projectionChart) projectionChart.destroy();
+    projectionChart = new Chart(projCtx, {
+      type: 'line',
+      data: {
+        labels: projData.map(yr => 'Yr ' + yr),
+        datasets: datasets,
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            grid: { color: '#1e293b' },
+            ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 },
+          },
+          y: {
+            grid: { color: '#1e293b' },
+            ticks: {
+              color: '#475569',
+              font: { size: 10 },
+              callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M',
+            },
+          },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, padding: 12, usePointStyle: true } },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            borderColor: '#334155',
+            borderWidth: 1,
+            titleColor: '#94a3b8',
+            bodyColor: '#e2e8f0',
+            callbacks: {
+              label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // Tax Drag Chart
+  const taxDragCtx = document.getElementById('taxDragChart');
+  if (taxDragCtx) {
+    if (taxDragChart) taxDragChart.destroy();
+    const sellData = projData.map(yr => Math.round(strategies.sell.afterTax * Math.pow(1 + annualReturn, yr)));
+    const exchangeData = projData.map(yr => Math.round(stockValue * Math.pow(1 + annualReturn * 0.935, yr)));
+    const dragData = projData.map((yr, i) => exchangeData[i] - sellData[i]);
+
+    taxDragChart = new Chart(taxDragCtx, {
+      type: 'bar',
+      data: {
+        labels: projData.map(yr => 'Yr ' + yr),
+        datasets: [{
+          label: 'Tax Drag Cost (Lost Wealth)',
+          data: dragData,
+          backgroundColor: projData.map((_, i) => {
+            const pct = i / timeHorizon;
+            return `rgba(239, 68, 68, ${0.3 + pct * 0.5})`;
+          }),
+          borderColor: '#ef4444',
+          borderWidth: 1,
+          borderRadius: 3,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 },
+          },
+          y: {
+            grid: { color: '#1e293b' },
+            ticks: {
+              color: '#475569',
+              font: { size: 10 },
+              callback: v => '$' + (v / 1_000).toFixed(0) + 'K',
+            },
+          },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true } },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            borderColor: '#334155',
+            borderWidth: 1,
+            callbacks: {
+              label: ctx => `Lost wealth: ${fmt(ctx.parsed.y)}`,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // ROI Summary Cards
+  const cardsContainer = document.getElementById('roi-summary-cards');
+  if (cardsContainer) {
+    const endValues = [
+      { label: 'Sell & Reinvest',  val: datasets[0].data[timeHorizon], color: '#ef4444', extra: 'Baseline after tax' },
+      { label: 'Exchange Fund',    val: datasets[1].data[timeHorizon], color: '#6366f1', extra: '⭐ Best risk-adjusted' },
+      { label: 'Charitable Trust', val: datasets[2].data[timeHorizon], color: '#10b981', extra: '+ income stream + deduction' },
+      { label: 'Opportunity Zone', val: datasets[3].data[timeHorizon], color: '#8b5cf6', extra: 'Highest upside, illiquid' },
+      { label: 'Deferred Sales',   val: datasets[4].data[timeHorizon], color: '#f59e0b', extra: 'Tax spread over time' },
+      { label: 'Collar + Loan',    val: datasets[5].data[timeHorizon], color: '#0ea5e9', extra: 'Liquidity without selling' },
+    ];
+
+    cardsContainer.innerHTML = endValues.map((item, i) => `
+      <div class="roi-card animate-in stagger-${i + 1}" style="border-color: ${item.color}33;">
+        <div class="roi-card-label">${item.label}</div>
+        <div class="roi-card-value" style="color: ${item.color}">${fmt(item.val)}</div>
+        <div class="roi-card-extra">${item.extra}</div>
+        <div style="margin-top:8px; font-size:11px; color: var(--text-dim);">
+          ${item.val > endValues[0].val
+            ? `+${fmt(item.val - endValues[0].val)} vs selling`
+            : item.label === 'Sell & Reinvest'
+              ? 'Baseline comparison'
+              : `${fmt(item.val - endValues[0].val)} vs selling`
+          }
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Year-by-Year Table
+  const table = document.getElementById('year-table');
+  if (table) {
+    const thead = table.querySelector('thead');
+    const tbody = table.querySelector('tbody');
+    thead.innerHTML = `<tr>
+      <th>Year</th>
+      <th>Sell & Reinvest</th>
+      <th>Exchange Fund</th>
+      <th>Charitable Trust</th>
+      <th>Opp Zone</th>
+      <th>Deferred Sales</th>
+      <th>Collar + Loan</th>
+    </tr>`;
+    
+    tbody.innerHTML = projData.filter(yr => yr % (timeHorizon > 15 ? 5 : yr > 10 ? 2 : 1) === 0 || yr === timeHorizon).map(yr => `
+      <tr>
+        <td>Year ${yr}</td>
+        ${datasets.map(ds => `<td style="color: ${ds.borderColor}">${fmtFull(ds.data[yr])}</td>`).join('')}
+      </tr>
+    `).join('');
+  }
+}
+
+// ============ RENDER: TAX TAB ============
+function renderTaxTab() {
+  const { stockValue, costBasis, capGainsRate } = getInputs();
+  const strategies = buildStrategies(stockValue, costBasis, capGainsRate);
+  const crtDeduction = Math.round(stockValue * 0.25);
+
+  // Tax bar chart
+  const taxData = [
+    { name: 'Sell Now',       tax: strategies.sell.taxNow, color: '#ef4444' },
+    { name: 'CRT',            tax: -crtDeduction,          color: '#10b981' },
+    { name: 'Exchange Fund',  tax: 0,                      color: '#6366f1' },
+    { name: 'Deferred Sales', tax: strategies.sell.taxNow,  color: '#f59e0b' },
+    { name: 'Opp Zone',       tax: 0,                      color: '#8b5cf6' },
+    { name: 'Collar + Loan',  tax: 0,                      color: '#0ea5e9' },
+  ];
+
+  const taxCtx = document.getElementById('taxBarChart');
+  if (taxCtx) {
+    if (taxBarChart) taxBarChart.destroy();
+    taxBarChart = new Chart(taxCtx, {
+      type: 'bar',
+      data: {
+        labels: taxData.map(d => d.name),
+        datasets: [{
+          label: 'Immediate Tax Impact',
+          data: taxData.map(d => d.tax),
+          backgroundColor: taxData.map(d => d.tax > 0 ? 'rgba(239,68,68,0.5)' : d.tax < 0 ? 'rgba(16,185,129,0.5)' : 'rgba(99,102,241,0.3)'),
+          borderColor: taxData.map(d => d.color),
+          borderWidth: 2,
+          borderRadius: 6,
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            grid: { color: '#1e293b' },
+            ticks: {
+              color: '#475569',
+              font: { size: 11 },
+              callback: v => (v < 0 ? '−' : '') + '$' + Math.abs(v / 1_000).toFixed(0) + 'K',
+            },
+          },
+          y: {
+            grid: { display: false },
+            ticks: { color: '#94a3b8', font: { size: 12, family: 'Inter' } },
+          },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            borderColor: '#334155',
+            borderWidth: 1,
+            callbacks: {
+              label: ctx => {
+                const v = ctx.parsed.x;
+                if (v < 0) return `Tax Deduction: ${fmtFull(Math.abs(v))}`;
+                if (v === 0) return 'No Tax Due';
+                return `Tax Due: ${fmtFull(v)}`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // Tax ideas
+  const container = document.getElementById('tax-ideas-grid');
+  if (container) {
+    container.innerHTML = taxIdeas.map((idea, i) => `
+      <div class="tax-idea-card animate-in stagger-${(i % 6) + 1}" style="border-color: ${idea.color}33;">
+        <div class="tax-idea-title" style="color: ${idea.color}">${idea.title}</div>
+        <div class="tax-idea-desc">${idea.desc}</div>
+        <div class="tax-idea-impact"><p>💰 Potential: ${idea.impact}</p></div>
+        <div class="tax-idea-caveat">⚠️ ${idea.caveat}</div>
+      </div>
+    `).join('');
+  }
+}
+
+// ============ RENDER: EDUCATION TAB ============
+function renderEducation() {
+  const { balance, monthly, childAge, childCount, uniType, returnRate } = getEduInputs();
+  const uni = UNIVERSITY_COSTS[uniType];
+  const yearsUntilCollege = Math.max(0, 18 - childAge);
+  const monthsUntilCollege = yearsUntilCollege * 12;
+
+  // Project 529 growth
+  const monthlyRate = returnRate / 12;
+  let projected529 = balance;
+  const growthByYear = [{ year: childAge, balance: Math.round(projected529), cost: 0 }];
+  
+  for (let m = 1; m <= monthsUntilCollege; m++) {
+    projected529 = projected529 * (1 + monthlyRate) + monthly;
+    if (m % 12 === 0) {
+      growthByYear.push({
+        year: childAge + (m / 12),
+        balance: Math.round(projected529),
+        cost: 0,
+      });
+    }
+  }
+
+  // College costs at enrollment (with inflation)
+  const costAtEnrollment = uni.annual * Math.pow(1 + COLLEGE_INFLATION, yearsUntilCollege);
+  const totalCollegeCost = costAtEnrollment * COLLEGE_YEARS * childCount;
+  const totalCollegeCostInflated = Array.from({ length: COLLEGE_YEARS }, (_, i) =>
+    uni.annual * Math.pow(1 + COLLEGE_INFLATION, yearsUntilCollege + i)
+  ).reduce((a, b) => a + b, 0) * childCount;
+
+  // Add college years to chart
+  let remaining529 = projected529;
+  for (let yr = 0; yr < COLLEGE_YEARS; yr++) {
+    const yearCost = uni.annual * Math.pow(1 + COLLEGE_INFLATION, yearsUntilCollege + yr) * childCount;
+    remaining529 = remaining529 * (1 + returnRate * 0.5) - yearCost; // conservative during drawdown
+    growthByYear.push({
+      year: 18 + yr + (childAge > 0 ? 0 : 1),
+      balance: Math.max(0, Math.round(remaining529)),
+      cost: Math.round(yearCost),
+    });
+  }
+
+  const coveragePct = Math.min(200, Math.round((projected529 / totalCollegeCostInflated) * 100));
+  const gap = totalCollegeCostInflated - projected529;
+
+  // Monthly needed to close gap
+  let monthlyNeeded = 0;
+  if (gap > 0 && monthsUntilCollege > 0) {
+    // PMT formula
+    const r = monthlyRate;
+    const n = monthsUntilCollege;
+    monthlyNeeded = Math.round((gap - balance * Math.pow(1 + r, n)) * r / (Math.pow(1 + r, n) - 1));
+    if (monthlyNeeded < 0) monthlyNeeded = 0;
+  }
+
+  // Results cards
+  const resultsContainer = document.getElementById('edu-results');
+  if (resultsContainer) {
+    const cards = [
+      {
+        label: 'Projected 529 at 18',
+        value: fmtFull(projected529),
+        note: `${yearsUntilCollege} years of compounding`,
+        color: '#6366f1',
+      },
+      {
+        label: `Total ${uni.label} Cost`,
+        value: fmtFull(totalCollegeCostInflated),
+        note: `${COLLEGE_YEARS} yrs × ${childCount} child${childCount > 1 ? 'ren' : ''} (w/ 5% inflation)`,
+        color: '#f59e0b',
+      },
+      {
+        label: 'Coverage',
+        value: coveragePct + '%',
+        note: coveragePct >= 100 ? '✅ Fully covered!' : `Gap: ${fmtFull(Math.abs(gap))}`,
+        color: coveragePct >= 100 ? '#10b981' : '#ef4444',
+      },
+      {
+        label: coveragePct >= 100 ? 'Surplus Projected' : 'Extra Monthly Needed',
+        value: coveragePct >= 100 ? fmtFull(Math.abs(gap)) : fmtFull(monthlyNeeded) + '/mo',
+        note: coveragePct >= 100 ? 'Above tuition costs' : 'To fully cover tuition',
+        color: coveragePct >= 100 ? '#10b981' : '#ef4444',
+      },
+    ];
+
+    resultsContainer.innerHTML = cards.map((c, i) => `
+      <div class="edu-result-card animate-in stagger-${i + 1}">
+        <div class="edu-result-label">${c.label}</div>
+        <div class="edu-result-value" style="color: ${c.color}">${c.value}</div>
+        <div class="edu-result-note">${c.note}</div>
+      </div>
+    `).join('');
+  }
+
+  // Education Chart
+  const eduCtx = document.getElementById('eduChart');
+  if (eduCtx) {
+    if (eduChart) eduChart.destroy();
+
+    // Build cost line
+    const costLine = growthByYear.map(g => {
+      if (g.year >= 18 && g.year < 18 + COLLEGE_YEARS) {
+        return g.cost;
+      }
+      return 0;
+    });
+
+    // Running total cost
+    const cumulativeCost = [];
+    let runningCost = 0;
+    growthByYear.forEach(g => {
+      if (g.year >= 18 && g.year < 18 + COLLEGE_YEARS) {
+        runningCost += g.cost;
+      }
+      cumulativeCost.push(runningCost);
+    });
+
+    eduChart = new Chart(eduCtx, {
+      type: 'line',
+      data: {
+        labels: growthByYear.map(g => 'Age ' + g.year),
+        datasets: [
+          {
+            label: '529 Balance',
+            data: growthByYear.map(g => g.balance),
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99,102,241,0.1)',
+            fill: true,
+            borderWidth: 2.5,
+            tension: 0.3,
+            pointRadius: 0,
+          },
+          {
+            label: 'Cumulative Cost',
+            data: cumulativeCost,
+            borderColor: '#ef4444',
+            backgroundColor: 'rgba(239,68,68,0.08)',
+            fill: true,
+            borderWidth: 2,
+            tension: 0.3,
+            borderDash: [5, 3],
+            pointRadius: 0,
+          },
+          {
+            label: 'Annual Cost',
+            data: costLine,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245,158,11,0.3)',
+            type: 'bar',
+            borderWidth: 1,
+            borderRadius: 4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            grid: { color: '#1e293b' },
+            ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 12 },
+          },
+          y: {
+            grid: { color: '#1e293b' },
+            ticks: {
+              color: '#475569',
+              font: { size: 10 },
+              callback: v => '$' + (v / 1_000).toFixed(0) + 'K',
+            },
+          },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 12 } },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            borderColor: '#334155',
+            borderWidth: 1,
+            callbacks: {
+              label: ctx => `${ctx.dataset.label}: ${fmtFull(ctx.parsed.y)}`,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // Education tips
+  const tipsContainer = document.getElementById('edu-tips-grid');
+  if (tipsContainer) {
+    tipsContainer.innerHTML = eduTips.map(tip => `
+      <div class="edu-tip-card">
+        <div class="edu-tip-header">
+          <span class="edu-tip-title">${tip.title}</span>
+          <span class="edu-tip-tag">${tip.tag}</span>
+        </div>
+        <p class="edu-tip-desc">${tip.desc}</p>
+      </div>
+    `).join('');
+  }
+}
+
+// ============ RENDER: PLAYBOOK TAB ============
+function renderPlaybook() {
+  const { stockValue, costBasis, annualReturn, timeHorizon, capGainsRate } = getInputs();
+  const strategies = buildStrategies(stockValue, costBasis, capGainsRate);
+  const crtDeduction = Math.round(stockValue * 0.25);
+
+  // Dynamic allocation
+  const exchangeAmt = Math.round(stockValue * 0.50);
+  const crtAmt      = Math.round(stockValue * 0.30);
+  const ozoneAmt    = Math.round(stockValue * 0.10);
+  const collarAmt   = Math.round(stockValue * 0.10);
+
+  const steps = [
+    {
+      step: '01', pct: '50%', amount: fmtFull(exchangeAmt),
+      title: 'Exchange Fund', icon: '🔄', color: '#6366f1',
+      desc: `Pool ${fmt(exchangeAmt)} into a qualified exchange fund. Zero capital gains taxes. Instantly diversified into 20-30 blue-chip stocks. Hold 7+ years for full tax-deferred benefit.`,
+      outcome: `${fmt(exchangeAmt)} → ${fmt(Math.round(exchangeAmt * Math.pow(1 + annualReturn * 0.935, timeHorizon)))} (${timeHorizon}yr)`,
+    },
+    {
+      step: '02', pct: '30%', amount: fmtFull(crtAmt),
+      title: 'Charitable Trust', icon: '🏛️', color: '#10b981',
+      desc: `Transfer ${fmt(crtAmt)} into a CRT. Get a ~${fmt(Math.round(crtAmt * 0.25))} tax deduction. Trust sells stock tax-free, invests the proceeds, and pays you 5-7% annually for life.`,
+      outcome: `${fmt(crtAmt)} → ${fmt(Math.round(crtAmt * Math.pow(1 + annualReturn * 0.94, timeHorizon)))} + ${fmt(Math.round(crtAmt * 0.06))}/yr income`,
+    },
+    {
+      step: '03', pct: '20%', amount: fmtFull(ozoneAmt + collarAmt),
+      title: 'OZ Fund + Collar', icon: '🏙️', color: '#f59e0b',
+      desc: `Deploy ${fmt(ozoneAmt)} into an Opportunity Zone fund — eliminate future gains after 10 years. Use a hedged collar on ${fmt(collarAmt)} to borrow ${fmt(Math.round(collarAmt * 0.7))} cash, no tax event.`,
+      outcome: `${fmt(ozoneAmt + collarAmt)} → ${fmt(Math.round(ozoneAmt * Math.pow(1 + annualReturn * 1.1, Math.min(timeHorizon, 10)) + collarAmt * Math.pow(1 + annualReturn * 0.92, timeHorizon)))} (tax-optimized)`,
+    },
+  ];
+
+  const stepsContainer = document.getElementById('playbook-steps');
+  if (stepsContainer) {
+    stepsContainer.innerHTML = steps.map((s, i) => `
+      <div class="playbook-step animate-in stagger-${i + 1}" style="border-color: ${s.color}44;">
+        <div class="playbook-step-header">
+          <span class="step-number" style="color: ${s.color}">STEP ${s.step}</span>
+          <span class="step-pct" style="color: #020817; background: ${s.color}">${s.pct}</span>
+        </div>
+        <div class="step-icon">${s.icon}</div>
+        <div class="step-title" style="color: ${s.color}">${s.title}</div>
+        <div class="step-amount">${s.amount}</div>
+        <div class="step-desc">${s.desc}</div>
+        <div class="step-outcome">
+          <p>📈 ${s.outcome}</p>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // New ideas
+  const ideasContainer = document.getElementById('new-ideas-grid');
+  if (ideasContainer) {
+    ideasContainer.innerHTML = newInvestmentIdeas.map(idea => `
+      <div class="idea-card">
+        <div class="idea-header">
+          <span class="idea-title">${idea.title}</span>
+          <span class="idea-tag">${idea.tag}</span>
+        </div>
+        <p class="idea-desc">${idea.desc}</p>
+      </div>
+    `).join('');
+  }
+
+  // Playbook chart — hybrid strategy projection
+  const pbCtx = document.getElementById('playbookChart');
+  if (pbCtx) {
+    if (playbookChart) playbookChart.destroy();
+    
+    const horizonData = Array.from({ length: timeHorizon + 1 }, (_, yr) => yr);
+    
+    // Hybrid combined
+    const hybridData = horizonData.map(yr => {
+      const exVal = exchangeAmt * Math.pow(1 + annualReturn * 0.935, yr);
+      const crtVal = crtAmt * Math.pow(1 + annualReturn * 0.94, yr);
+      const ozVal = ozoneAmt * Math.pow(1 + annualReturn * (yr < 10 ? 1.1 : 1.05), yr);
+      const colVal = collarAmt * Math.pow(1 + annualReturn * 0.92, yr);
+      return Math.round(exVal + crtVal + ozVal + colVal);
+    });
+
+    // Sell all
+    const sellData = horizonData.map(yr => Math.round(strategies.sell.afterTax * Math.pow(1 + annualReturn, yr)));
+    
+    // Keep concentrated (do nothing)
+    const holdData = horizonData.map(yr => Math.round(stockValue * Math.pow(1 + annualReturn, yr)));
+
+    playbookChart = new Chart(pbCtx, {
+      type: 'line',
+      data: {
+        labels: horizonData.map(yr => 'Yr ' + yr),
+        datasets: [
+          {
+            label: '⭐ Hybrid Strategy',
+            data: hybridData,
+            borderColor: '#a5b4fc',
+            backgroundColor: 'rgba(165,180,252,0.12)',
+            fill: true,
+            borderWidth: 3,
+            tension: 0.3,
+            pointRadius: 0,
+          },
+          {
+            label: 'Hold Concentrated (Do Nothing)',
+            data: holdData,
+            borderColor: '#64748b',
+            fill: false,
+            borderWidth: 1.5,
+            tension: 0.3,
+            borderDash: [6, 4],
+            pointRadius: 0,
+          },
+          {
+            label: 'Sell & Reinvest',
+            data: sellData,
+            borderColor: '#ef4444',
+            fill: false,
+            borderWidth: 1.5,
+            tension: 0.3,
+            borderDash: [3, 3],
+            pointRadius: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            grid: { color: '#1e293b' },
+            ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 },
+          },
+          y: {
+            grid: { color: '#1e293b' },
+            ticks: {
+              color: '#475569',
+              font: { size: 10 },
+              callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M',
+            },
+          },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, padding: 14, usePointStyle: true } },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            borderColor: '#334155',
+            borderWidth: 1,
+            callbacks: {
+              label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`,
+            },
+          },
+        },
+      },
+    });
+  }
+}
+
+// ============ STATE TAX RATES ============
+const STATE_TAXES = {
+  CA: { name: 'California', capGains: 0.133, income: 0.133, flag: '🌴' },
+  NY: { name: 'New York', capGains: 0.109, income: 0.109, flag: '🗽' },
+  NJ: { name: 'New Jersey', capGains: 0.1075, income: 0.1075, flag: '🏖️' },
+  OR: { name: 'Oregon', capGains: 0.099, income: 0.099, flag: '🌲' },
+  MN: { name: 'Minnesota', capGains: 0.0985, income: 0.0985, flag: '❄️' },
+  HI: { name: 'Hawaii', capGains: 0.11, income: 0.11, flag: '🌺' },
+  VT: { name: 'Vermont', capGains: 0.0875, income: 0.0875, flag: '🍁' },
+  IA: { name: 'Iowa', capGains: 0.0853, income: 0.0853, flag: '🌽' },
+  CO: { name: 'Colorado', capGains: 0.044, income: 0.044, flag: '⛰️' },
+  IL: { name: 'Illinois', capGains: 0.0495, income: 0.0495, flag: '🏙️' },
+  MA: { name: 'Massachusetts', capGains: 0.09, income: 0.09, flag: '🎓' },
+  OTHER: { name: 'Other', capGains: 0, income: 0, flag: '📍' },
+};
+
+const ZERO_TAX_STATES = [
+  { code: 'TX', name: 'Texas', flag: '🤠', note: 'No state income tax. Robust economy, lower cost of living.' },
+  { code: 'FL', name: 'Florida', flag: '🌴', note: 'No state income tax. Popular for retirees. Homestead exemption.' },
+  { code: 'NV', name: 'Nevada', flag: '🎰', note: 'No state income tax. No corporate income tax either.' },
+  { code: 'WA', name: 'Washington', flag: '☕', note: 'No income tax (has 7% cap gains tax on gains >$270K).' },
+  { code: 'WY', name: 'Wyoming', flag: '🦬', note: 'No state income tax. Dynasty trust–friendly.' },
+  { code: 'SD', name: 'South Dakota', flag: '🏔️', note: 'No state income tax. Best trust laws in the nation.' },
+  { code: 'TN', name: 'Tennessee', flag: '🎸', note: 'No income tax on wages/salaries. Hall tax eliminated 2021.' },
+  { code: 'AK', name: 'Alaska', flag: '🐻', note: 'No income tax. Pays residents a Permanent Fund dividend.' },
+  { code: 'NH', name: 'New Hampshire', flag: '🏔️', note: 'No income/sales tax. 3% tax on interest & dividends (ending 2027).' },
+];
+
+const relocationTips = [
+  {
+    title: 'Establish Genuine Domicile',
+    desc: 'High-tax states (CA, NY) aggressively audit departures. You must change voter registration, driver\'s license, bank accounts, and spend 183+ days in the new state.',
+    tag: 'Critical',
+  },
+  {
+    title: 'Timing the Move',
+    desc: 'Relocate BEFORE the liquidity event. Selling stock while still a CA/NY resident means full state tax applies regardless of when you move afterward.',
+    tag: 'Timing',
+  },
+  {
+    title: 'California Clawback Rules',
+    desc: 'California tracks former residents for years. Maintaining significant ties (home, business, family) can result in "sourcing" income back to CA even after moving.',
+    tag: 'CA Warning',
+  },
+  {
+    title: 'Dynasty Trust in SD or NV',
+    desc: 'South Dakota and Nevada allow perpetual (dynasty) trusts with no state tax. Set up a trust before relocating for multi-generational wealth transfer.',
+    tag: 'Estate Plan',
+  },
+  {
+    title: 'Washington State 7% Exception',
+    desc: 'WA enacted a 7% capital gains tax on gains exceeding $270K (2024). Move to TX, FL, or NV instead if your gains are above this threshold.',
+    tag: 'Watch Out',
+  },
+  {
+    title: 'Cost of Living Offset',
+    desc: 'Moving from CA/NY to TX/FL often reduces cost of living 20-40%. Factor in housing, insurance, and daily expenses — not just taxes — in your total savings calculation.',
+    tag: 'Bonus Savings',
+  },
+];
+
+// ============ RENDER: MONTE CARLO TAB ============
+function renderMonteCarlo() {
+  const { stockValue, costBasis, annualReturn, timeHorizon, capGainsRate } = getInputs();
+  const volatility = (parseFloat(document.getElementById('mcVolatility')?.value) || 15) / 100;
+  const numSims = parseInt(document.getElementById('mcSimulations')?.value) || 1000;
+  const strategies = buildStrategies(stockValue, costBasis, capGainsRate);
+
+  // Run Monte Carlo
+  function runSim(initial, returnMult, sims, years, vol) {
+    const mu = annualReturn * returnMult;
+    const allPaths = [];
+    for (let s = 0; s < sims; s++) {
+      const path = [initial];
+      let val = initial;
+      for (let y = 1; y <= years; y++) {
+        // Geometric Brownian Motion
+        const z = gaussianRandom();
+        const r = mu - 0.5 * vol * vol + vol * z;
+        val = val * Math.exp(r);
+        path.push(Math.round(val));
+      }
+      allPaths.push(path);
+    }
+    return allPaths;
+  }
+
+  function gaussianRandom() {
+    // Box-Muller transform
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  }
+
+  function getPercentiles(allPaths, pcts) {
+    const years = allPaths[0].length;
+    const result = {};
+    pcts.forEach(p => result[p] = []);
+    for (let y = 0; y < years; y++) {
+      const vals = allPaths.map(path => path[y]).sort((a, b) => a - b);
+      pcts.forEach(p => {
+        const idx = Math.floor(vals.length * p / 100);
+        result[p].push(vals[Math.min(idx, vals.length - 1)]);
+      });
+    }
+    return result;
+  }
+
+  // Exchange Fund simulation
+  const exchangePaths = runSim(stockValue, 0.935, numSims, timeHorizon, volatility);
+  const exchangePcts = getPercentiles(exchangePaths, [5, 25, 50, 75, 95]);
+
+  // Sell & Reinvest simulation
+  const sellPaths = runSim(strategies.sell.afterTax, 1, numSims, timeHorizon, volatility);
+  const sellPcts = getPercentiles(sellPaths, [5, 25, 50, 75, 95]);
+
+  const labels = Array.from({ length: timeHorizon + 1 }, (_, i) => 'Yr ' + i);
+
+  function buildConeChart(ctx, pcts, title, color) {
+    return new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: '95th Percentile',
+            data: pcts[95],
+            borderColor: color + '44',
+            backgroundColor: color + '08',
+            fill: '+1',
+            borderWidth: 1,
+            tension: 0.3,
+            pointRadius: 0,
+          },
+          {
+            label: '75th Percentile',
+            data: pcts[75],
+            borderColor: color + '66',
+            backgroundColor: color + '12',
+            fill: '+1',
+            borderWidth: 1.5,
+            tension: 0.3,
+            pointRadius: 0,
+          },
+          {
+            label: 'Median (50th)',
+            data: pcts[50],
+            borderColor: color,
+            backgroundColor: 'transparent',
+            fill: false,
+            borderWidth: 2.5,
+            tension: 0.3,
+            pointRadius: 0,
+          },
+          {
+            label: '25th Percentile',
+            data: pcts[25],
+            borderColor: color + '66',
+            backgroundColor: color + '12',
+            fill: '+1',
+            borderWidth: 1.5,
+            tension: 0.3,
+            pointRadius: 0,
+          },
+          {
+            label: '5th Percentile',
+            data: pcts[5],
+            borderColor: color + '44',
+            backgroundColor: 'transparent',
+            fill: false,
+            borderWidth: 1,
+            tension: 0.3,
+            pointRadius: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            grid: { color: '#1e293b' },
+            ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 },
+          },
+          y: {
+            grid: { color: '#1e293b' },
+            ticks: {
+              color: '#475569',
+              font: { size: 10 },
+              callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M',
+            },
+          },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 10 }, usePointStyle: true, padding: 10 } },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            borderColor: '#334155',
+            borderWidth: 1,
+            callbacks: {
+              label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // Render exchange cone
+  const exCtx = document.getElementById('mcExchangeChart');
+  if (exCtx) {
+    if (mcExchangeChart) mcExchangeChart.destroy();
+    mcExchangeChart = buildConeChart(exCtx, exchangePcts, 'Exchange Fund', '#6366f1');
+  }
+
+  // Render sell cone
+  const sellCtx = document.getElementById('mcSellChart');
+  if (sellCtx) {
+    if (mcSellChart) mcSellChart.destroy();
+    mcSellChart = buildConeChart(sellCtx, sellPcts, 'Sell & Reinvest', '#ef4444');
+  }
+
+  // MC Stats
+  const statsGrid = document.getElementById('mc-stats-grid');
+  if (statsGrid) {
+    const exMedian = exchangePcts[50][timeHorizon];
+    const sellMedian = sellPcts[50][timeHorizon];
+    const exWorst = exchangePcts[5][timeHorizon];
+    const exBest = exchangePcts[95][timeHorizon];
+    const probExWins = exchangePaths.filter((p, i) => p[timeHorizon] > sellPaths[i][timeHorizon]).length / numSims * 100;
+
+    const stats = [
+      { label: 'Exchange Fund Median', value: fmt(exMedian), note: `${timeHorizon}-year 50th percentile`, color: '#6366f1' },
+      { label: 'Sell & Reinvest Median', value: fmt(sellMedian), note: `${timeHorizon}-year 50th percentile`, color: '#ef4444' },
+      { label: 'Exchange Fund Range', value: `${fmt(exWorst)} – ${fmt(exBest)}`, note: '5th to 95th percentile', color: '#a5b4fc' },
+      { label: 'Prob. Exchange Wins', value: probExWins.toFixed(0) + '%', note: `out of ${numSims.toLocaleString()} simulations`, color: probExWins > 50 ? '#10b981' : '#ef4444' },
+    ];
+
+    statsGrid.innerHTML = stats.map((s, i) => `
+      <div class="mc-stat-card animate-in stagger-${i + 1}">
+        <div class="mc-stat-label">${s.label}</div>
+        <div class="mc-stat-value" style="color: ${s.color}">${s.value}</div>
+        <div class="mc-stat-note">${s.note}</div>
+      </div>
+    `).join('');
+  }
+
+  // Sensitivity Analysis
+  const sensCtx = document.getElementById('sensitivityChart');
+  if (sensCtx) {
+    if (sensitivityChart) sensitivityChart.destroy();
+    const returnScenarios = [0.03, 0.05, 0.07, 0.09, 0.11, 0.13];
+    const stratNames = ['Sell & Reinvest', 'Exchange Fund', 'Charitable Trust', 'Opp Zone'];
+    const colors = ['#ef4444', '#6366f1', '#10b981', '#8b5cf6'];
+
+    const sensDatasets = stratNames.map((name, si) => ({
+      label: name,
+      data: returnScenarios.map(r => {
+        switch (si) {
+          case 0: return Math.round(strategies.sell.afterTax * Math.pow(1 + r, timeHorizon));
+          case 1: return Math.round(stockValue * Math.pow(1 + r * 0.935, timeHorizon));
+          case 2: return Math.round(stockValue * Math.pow(1 + r * 0.94, timeHorizon));
+          case 3: return Math.round(stockValue * Math.pow(1 + r * 1.1, timeHorizon));
+        }
+      }),
+      borderColor: colors[si],
+      backgroundColor: colors[si] + '30',
+      borderWidth: 2,
+      borderRadius: 4,
+    }));
+
+    sensitivityChart = new Chart(sensCtx, {
+      type: 'bar',
+      data: {
+        labels: returnScenarios.map(r => (r * 100).toFixed(0) + '% Return'),
+        datasets: sensDatasets,
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11 } } },
+          y: {
+            grid: { color: '#1e293b' },
+            ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M' },
+          },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 12 } },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            borderColor: '#334155',
+            borderWidth: 1,
+            callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` },
+          },
+        },
+      },
+    });
+  }
+}
+
+// ============ RENDER: INCOME & BREAKEVEN TAB ============
+function renderIncomeBreakeven() {
+  const { stockValue, costBasis, annualReturn, timeHorizon, capGainsRate } = getInputs();
+  const strategies = buildStrategies(stockValue, costBasis, capGainsRate);
+
+  const years = Array.from({ length: timeHorizon + 1 }, (_, i) => i);
+
+  // Annual income from each strategy
+  // CRT: 6% annual payout of trust value
+  // Exchange Fund: ~1.5% dividends from diversified portfolio
+  // Sell & Reinvest: ~2% dividends from diversified
+  // Collar: dividends from stock minus interest (~net 0-1%)
+  // Opp Zone: ~3-4% rental/development income
+  // DST: installment payments (deferred)
+
+  const crtPayoutRate = 0.06;
+  const exchangeDivRate = 0.015;
+  const sellDivRate = 0.02;
+  const collarNetRate = 0.005;
+  const ozoneIncomeRate = 0.035;
+  const dstPayoutRate = 0.04;
+
+  const incomeData = {
+    crt: years.map(yr => Math.round(stockValue * Math.pow(1 + annualReturn * 0.94, yr) * crtPayoutRate)),
+    exchange: years.map(yr => Math.round(stockValue * Math.pow(1 + annualReturn * 0.935, yr) * exchangeDivRate)),
+    sell: years.map(yr => Math.round(strategies.sell.afterTax * Math.pow(1 + annualReturn, yr) * sellDivRate)),
+    collar: years.map(yr => Math.round(stockValue * Math.pow(1 + annualReturn * 0.92, yr) * collarNetRate)),
+    ozone: years.map(yr => yr >= 10 ? Math.round(stockValue * Math.pow(1 + annualReturn * 1.1, yr) * ozoneIncomeRate) : 0),
+    dst: years.map(yr => Math.round(stockValue * dstPayoutRate)), // fixed payout
+  };
+
+  // Income Chart
+  const incCtx = document.getElementById('incomeChart');
+  if (incCtx) {
+    if (incomeChart) incomeChart.destroy();
+    incomeChart = new Chart(incCtx, {
+      type: 'line',
+      data: {
+        labels: years.map(yr => 'Yr ' + yr),
+        datasets: [
+          { label: 'CRT Income', data: incomeData.crt, borderColor: '#10b981', borderWidth: 2.5, tension: 0.3, pointRadius: 0, fill: false },
+          { label: 'Sell Dividends', data: incomeData.sell, borderColor: '#ef4444', borderWidth: 2, tension: 0.3, pointRadius: 0, fill: false },
+          { label: 'Exchange Dividends', data: incomeData.exchange, borderColor: '#6366f1', borderWidth: 2, tension: 0.3, pointRadius: 0, fill: false },
+          { label: 'Opp Zone (post-yr10)', data: incomeData.ozone, borderColor: '#8b5cf6', borderWidth: 2, tension: 0.3, borderDash: [5, 3], pointRadius: 0, fill: false },
+          { label: 'DST Payout', data: incomeData.dst, borderColor: '#f59e0b', borderWidth: 2, tension: 0.3, borderDash: [3, 3], pointRadius: 0, fill: false },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1000).toFixed(0) + 'K' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtFull(ctx.parsed.y)}/yr` } },
+        },
+      },
+    });
+  }
+
+  // Breakeven Chart — when does each strategy overtake selling?
+  const bkCtx = document.getElementById('breakevenChart');
+  if (bkCtx) {
+    if (breakevenChart) breakevenChart.destroy();
+
+    const sellWealth = years.map(yr => strategies.sell.afterTax * Math.pow(1 + annualReturn, yr));
+    const exchangeDiff = years.map(yr => stockValue * Math.pow(1 + annualReturn * 0.935, yr) - sellWealth[yr]);
+    const crtDiff = years.map(yr => stockValue * Math.pow(1 + annualReturn * 0.94, yr) - sellWealth[yr]);
+    const ozoneDiff = years.map(yr => {
+      const val = stockValue * Math.pow(1 + annualReturn * 1.1, yr);
+      return (yr >= 10 ? val * 0.95 : val) - sellWealth[yr];
+    });
+
+    breakevenChart = new Chart(bkCtx, {
+      type: 'line',
+      data: {
+        labels: years.map(yr => 'Yr ' + yr),
+        datasets: [
+          { label: 'Exchange vs Sell', data: exchangeDiff, borderColor: '#6366f1', borderWidth: 2.5, tension: 0.3, pointRadius: 0, fill: { target: 'origin', above: 'rgba(99,102,241,0.08)', below: 'rgba(239,68,68,0.08)' } },
+          { label: 'CRT vs Sell', data: crtDiff, borderColor: '#10b981', borderWidth: 2, tension: 0.3, pointRadius: 0, fill: false },
+          { label: 'Opp Zone vs Sell', data: ozoneDiff, borderColor: '#8b5cf6', borderWidth: 2, tension: 0.3, borderDash: [5, 3], pointRadius: 0, fill: false },
+          { label: 'Breakeven Line', data: years.map(() => 0), borderColor: '#475569', borderWidth: 1, borderDash: [4, 4], pointRadius: 0, fill: false },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => (v >= 0 ? '+' : '') + '$' + (v / 1000).toFixed(0) + 'K' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: {
+            backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1,
+            callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y >= 0 ? '+' : ''}${fmt(ctx.parsed.y)}` },
+          },
+        },
+      },
+    });
+  }
+
+  // Income summary cards
+  const cardsContainer = document.getElementById('income-summary-cards');
+  if (cardsContainer) {
+    const yr10 = Math.min(10, timeHorizon);
+    const yr20 = timeHorizon;
+    const cumCRT = incomeData.crt.reduce((a, b) => a + b, 0);
+    const cumSell = incomeData.sell.reduce((a, b) => a + b, 0);
+    const cumExchange = incomeData.exchange.reduce((a, b) => a + b, 0);
+
+    // Find breakeven years
+    const sellWealth = years.map(yr => strategies.sell.afterTax * Math.pow(1 + annualReturn, yr));
+    let exBreakeven = 'Yr 0';
+    for (let yr = 0; yr <= timeHorizon; yr++) {
+      if (stockValue * Math.pow(1 + annualReturn * 0.935, yr) > sellWealth[yr]) {
+        exBreakeven = 'Year ' + yr;
+        break;
+      }
+    }
+
+    const cards = [
+      { label: 'CRT Total Income', value: fmt(cumCRT), extra: `Over ${timeHorizon} years @ 6% payout`, color: '#10b981' },
+      { label: 'Exchange Breakeven', value: exBreakeven, extra: 'When Exchange Fund overtakes Sell', color: '#6366f1' },
+      { label: 'CRT Year 1 Income', value: fmtFull(incomeData.crt[1] || 0) + '/yr', extra: 'First year payout', color: '#10b981' },
+      { label: 'CRT Year ' + yr20 + ' Income', value: fmtFull(incomeData.crt[yr20] || 0) + '/yr', extra: 'Final year payout', color: '#10b981' },
+      { label: 'Sell Cumulative Dividends', value: fmt(cumSell), extra: `Over ${timeHorizon} years @ 2% yield`, color: '#ef4444' },
+      { label: 'Income Advantage (CRT)', value: '+' + fmt(cumCRT - cumSell), extra: 'CRT total income minus Sell dividends', color: cumCRT > cumSell ? '#10b981' : '#ef4444' },
+    ];
+
+    cardsContainer.innerHTML = cards.map((c, i) => `
+      <div class="roi-card animate-in stagger-${i + 1}" style="border-color: ${c.color}33;">
+        <div class="roi-card-label">${c.label}</div>
+        <div class="roi-card-value" style="color: ${c.color}">${c.value}</div>
+        <div class="roi-card-extra">${c.extra}</div>
+      </div>
+    `).join('');
+  }
+
+  // Cumulative income chart
+  const cumCtx = document.getElementById('cumulativeIncomeChart');
+  if (cumCtx) {
+    if (cumulativeIncomeChart) cumulativeIncomeChart.destroy();
+
+    function cumSum(arr) {
+      let total = 0;
+      return arr.map(v => { total += v; return total; });
+    }
+
+    cumulativeIncomeChart = new Chart(cumCtx, {
+      type: 'line',
+      data: {
+        labels: years.map(yr => 'Yr ' + yr),
+        datasets: [
+          { label: 'CRT Cumulative', data: cumSum(incomeData.crt), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true, borderWidth: 2.5, tension: 0.3, pointRadius: 0 },
+          { label: 'Sell Dividends Cumulative', data: cumSum(incomeData.sell), borderColor: '#ef4444', fill: false, borderWidth: 2, tension: 0.3, pointRadius: 0 },
+          { label: 'Exchange Dividends Cumulative', data: cumSum(incomeData.exchange), borderColor: '#6366f1', fill: false, borderWidth: 2, tension: 0.3, pointRadius: 0 },
+          { label: 'DST Cumulative', data: cumSum(incomeData.dst), borderColor: '#f59e0b', fill: false, borderWidth: 2, tension: 0.3, borderDash: [5, 3], pointRadius: 0 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1000).toFixed(0) + 'K' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+        },
+      },
+    });
+  }
+}
+
+// ============ RENDER: STATE RELOCATION TAB ============
+function renderRelocation() {
+  const { stockValue, costBasis } = getInputs();
+  const gain = Math.max(0, stockValue - costBasis);
+  const currentStateCode = document.getElementById('currentState')?.value || 'CA';
+  const annualIncome = parseFloat(document.getElementById('annualIncome')?.value) || 500000;
+  const yearsAfter = parseInt(document.getElementById('yearsInNewState')?.value) || 10;
+  const currentState = STATE_TAXES[currentStateCode] || STATE_TAXES.CA;
+  if (currentStateCode === 'OTHER') {
+    currentState.capGains = (parseFloat(document.getElementById('stateRate')?.value) || 0) / 100;
+    currentState.income = currentState.capGains;
+  }
+
+  const capGainsSavings = Math.round(gain * currentState.capGains);
+  const annualIncomeSavings = Math.round(annualIncome * currentState.income);
+
+  // Relocation cards
+  const grid = document.getElementById('relocation-grid');
+  if (grid) {
+    // Current state card
+    let html = `
+      <div class="relocation-card current-state">
+        <div class="relocation-state-flag">${currentState.flag}</div>
+        <div class="relocation-state-name">${currentState.name} (Current)</div>
+        <div class="relocation-rate" style="color: #ef4444">${(currentState.capGains * 100).toFixed(1)}%</div>
+        <div class="relocation-savings" style="color: #ef4444">
+          State tax on gains: ${fmtFull(capGainsSavings)}
+        </div>
+        <div class="relocation-detail">Annual income tax: ${fmtFull(annualIncomeSavings)}/yr</div>
+      </div>
+    `;
+
+    // Zero-tax state cards
+    ZERO_TAX_STATES.slice(0, 8).forEach(st => {
+      const totalSavings = capGainsSavings + (annualIncomeSavings * yearsAfter);
+      html += `
+        <div class="relocation-card">
+          <div class="relocation-state-flag">${st.flag}</div>
+          <div class="relocation-state-name">${st.name}</div>
+          <div class="relocation-rate" style="color: #10b981">0%</div>
+          <div class="relocation-savings" style="color: #10b981">
+            Save: ${fmtFull(totalSavings)} over ${yearsAfter}yr
+          </div>
+          <div class="relocation-detail">${st.note}</div>
+        </div>
+      `;
+    });
+
+    grid.innerHTML = html;
+  }
+
+  // Relocation chart
+  const relCtx = document.getElementById('relocationChart');
+  if (relCtx) {
+    if (relocationChart) relocationChart.destroy();
+    const yearsArr = Array.from({ length: yearsAfter + 1 }, (_, i) => i);
+    const colors = ['#10b981', '#6366f1', '#f59e0b', '#8b5cf6', '#0ea5e9'];
+    const topStates = ZERO_TAX_STATES.slice(0, 5);
+
+    const datasets = topStates.map((st, si) => ({
+      label: st.name,
+      data: yearsArr.map(yr => yr === 0 ? capGainsSavings : capGainsSavings + (annualIncomeSavings * yr)),
+      borderColor: colors[si],
+      backgroundColor: si === 0 ? colors[si] + '15' : 'transparent',
+      fill: si === 0,
+      borderWidth: si === 0 ? 2.5 : 2,
+      tension: 0.3,
+      pointRadius: 0,
+    }));
+
+    relocationChart = new Chart(relCtx, {
+      type: 'line',
+      data: {
+        labels: yearsArr.map(yr => 'Yr ' + yr),
+        datasets,
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 } } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1000).toFixed(0) + 'K' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 12 } },
+          tooltip: {
+            backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1,
+            callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtFull(ctx.parsed.y)} saved` },
+          },
+        },
+      },
+    });
+  }
+
+  // Relocation tips
+  const tipsContainer = document.getElementById('relocation-tips');
+  if (tipsContainer) {
+    tipsContainer.innerHTML = relocationTips.map(tip => `
+      <div class="edu-tip-card">
+        <div class="edu-tip-header">
+          <span class="edu-tip-title">${tip.title}</span>
+          <span class="edu-tip-tag">${tip.tag}</span>
+        </div>
+        <p class="edu-tip-desc">${tip.desc}</p>
+      </div>
+    `).join('');
+  }
+}
+
+// ============ EVENT LISTENERS ============
+function initInputListeners() {
+  const scenarioInputs = ['stockValue', 'costBasis', 'annualReturn', 'timeHorizon', 'taxBracket', 'stateRate'];
+  const eduInputs = ['edu529Balance', 'eduMonthlyContrib', 'eduChildAge', 'eduChildCount', 'eduType', 'edu529Return'];
+  const relocationInputs = ['currentState', 'annualIncome', 'yearsInNewState'];
+
+  scenarioInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', debounce(() => {
+        updateLiveSummary();
+        const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+        if (activeTab) rebuildCurrentTab(activeTab);
+      }, 300));
+    }
+  });
+
+  eduInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', debounce(() => {
+        const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+        if (activeTab === 'education') renderEducation();
+      }, 300));
+    }
+  });
+
+  relocationInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', debounce(() => {
+        const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+        if (activeTab === 'relocation') renderRelocation();
+      }, 300));
+    }
+  });
+
+  // Monte Carlo run button
+  const mcBtn = document.getElementById('runMonteCarlo');
+  if (mcBtn) {
+    mcBtn.addEventListener('click', () => {
+      mcBtn.classList.add('running');
+      mcBtn.textContent = '⏳ Running...';
+      setTimeout(() => {
+        renderMonteCarlo();
+        mcBtn.classList.remove('running');
+        mcBtn.textContent = '▶ Run Simulation';
+      }, 100);
+    });
+  }
+}
+
+function debounce(fn, delay) {
+  let timer;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
+// ============ INITIALIZATION ============
+document.addEventListener('DOMContentLoaded', () => {
+  initTabs();
+  initInputListeners();
+  updateLiveSummary();
+  renderStrategies();
+  renderRadarChart();
+});

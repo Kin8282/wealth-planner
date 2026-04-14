@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wealth Strategy Planner — What-If Scenario Analysis</title>
+  <meta name="description" content="Interactive What-If Scenario Analysis for concentrated stock positions. Compare Charitable Trusts, Exchange Funds, Opportunity Zones, 529 plans, and more." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Ambient background effects -->
+  <div class="ambient-orb orb-1"></div>
+  <div class="ambient-orb orb-2"></div>
+  <div class="ambient-orb orb-3"></div>
+
+  <!-- Header -->
+  <header id="app-header">
+    <div class="header-inner">
+      <div class="header-badge">◆ PRIVATE WEALTH STRATEGY ENGINE</div>
+      <h1 class="header-title">What-If Scenario Planner</h1>
+      <p class="header-subtitle">
+        Concentrated Stock Analysis · Tax Strategy Optimizer · 529 Education Planning
+      </p>
+    </div>
+  </header>
+
+  <!-- Scenario Inputs -->
+  <section id="scenario-inputs" class="glass-panel">
+    <div class="section-header">
+      <h2>⚙️ Your Scenario Parameters</h2>
+      <p class="section-desc">Adjust values to see how each strategy performs under your conditions</p>
+    </div>
+    <div class="input-grid">
+      <div class="input-group">
+        <label for="stockValue">Stock Position Value</label>
+        <div class="input-wrapper">
+          <span class="input-prefix">$</span>
+          <input type="number" id="stockValue" value="1000000" min="100000" step="50000" />
+        </div>
+      </div>
+      <div class="input-group">
+        <label for="costBasis">Cost Basis</label>
+        <div class="input-wrapper">
+          <span class="input-prefix">$</span>
+          <input type="number" id="costBasis" value="100000" min="0" step="10000" />
+        </div>
+      </div>
+      <div class="input-group">
+        <label for="annualReturn">Expected Annual Return</label>
+        <div class="input-wrapper">
+          <input type="number" id="annualReturn" value="7" min="1" max="20" step="0.5" />
+          <span class="input-suffix">%</span>
+        </div>
+      </div>
+      <div class="input-group">
+        <label for="timeHorizon">Time Horizon</label>
+        <div class="input-wrapper">
+          <input type="number" id="timeHorizon" value="20" min="5" max="40" step="1" />
+          <span class="input-suffix">Years</span>
+        </div>
+      </div>
+      <div class="input-group">
+        <label for="taxBracket">Marginal Tax Bracket</label>
+        <div class="input-wrapper">
+          <select id="taxBracket">
+            <option value="0.37">37% (Top Bracket)</option>
+            <option value="0.35">35%</option>
+            <option value="0.32">32%</option>
+            <option value="0.24">24%</option>
+            <option value="0.22">22%</option>
+          </select>
+        </div>
+      </div>
+      <div class="input-group">
+        <label for="stateRate">State Capital Gains Rate</label>
+        <div class="input-wrapper">
+          <input type="number" id="stateRate" value="0" min="0" max="14" step="0.1" />
+          <span class="input-suffix">%</span>
+        </div>
+      </div>
+    </div>
+    <!-- Live computed summary -->
+    <div id="live-summary" class="live-summary-bar">
+      <div class="summary-item">
+        <span class="summary-label">Unrealized Gain</span>
+        <span class="summary-value gain" id="unrealizedGain">$900,000</span>
+      </div>
+      <div class="summary-divider"></div>
+      <div class="summary-item">
+        <span class="summary-label">Fed Cap Gains Tax</span>
+        <span class="summary-value tax" id="fedTax">$214,200</span>
+      </div>
+      <div class="summary-divider"></div>
+      <div class="summary-item">
+        <span class="summary-label">State Tax</span>
+        <span class="summary-value tax" id="stateTax">$0</span>
+      </div>
+      <div class="summary-divider"></div>
+      <div class="summary-item">
+        <span class="summary-label">Total Tax if Sold</span>
+        <span class="summary-value tax-total" id="totalTax">$214,200</span>
+      </div>
+      <div class="summary-divider"></div>
+      <div class="summary-item">
+        <span class="summary-label">After-Tax Proceeds</span>
+        <span class="summary-value preserved" id="afterTax">$785,800</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Navigation Tabs -->
+  <nav id="tab-nav">
+    <button class="tab-btn active" data-tab="strategies" id="tab-strategies">
+      <span class="tab-icon">📊</span> Strategy Comparison
+    </button>
+    <button class="tab-btn" data-tab="roi" id="tab-roi">
+      <span class="tab-icon">📈</span> ROI Deep Dive
+    </button>
+    <button class="tab-btn" data-tab="montecarlo" id="tab-montecarlo">
+      <span class="tab-icon">🎲</span> Monte Carlo
+    </button>
+    <button class="tab-btn" data-tab="income" id="tab-income">
+      <span class="tab-icon">💰</span> Income & Breakeven
+    </button>
+    <button class="tab-btn" data-tab="tax" id="tab-tax">
+      <span class="tab-icon">🧾</span> Tax Strategies
+    </button>
+    <button class="tab-btn" data-tab="relocation" id="tab-relocation">
+      <span class="tab-icon">🏠</span> State Relocation
+    </button>
+    <button class="tab-btn" data-tab="education" id="tab-education">
+      <span class="tab-icon">🎓</span> 529 Education Plan
+    </button>
+    <button class="tab-btn" data-tab="playbook" id="tab-playbook">
+      <span class="tab-icon">🎯</span> Master Playbook
+    </button>
+  </nav>
+
+  <!-- Tab Content Area -->
+  <main id="tab-content">
+
+    <!-- ============ STRATEGIES TAB ============ -->
+    <section id="panel-strategies" class="tab-panel active">
+      <div class="strategies-grid" id="strategies-grid">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Radar Chart -->
+      <div class="glass-panel chart-panel" style="margin-top:24px;">
+        <h3 class="chart-title">Multi-Dimensional Strategy Radar</h3>
+        <div class="chart-container radar-container">
+          <canvas id="radarChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ROI DEEP DIVE TAB ============ -->
+    <section id="panel-roi" class="tab-panel">
+      <div class="roi-charts-grid">
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Wealth Growth Projection — All Strategies</h3>
+          <p class="chart-subtitle">Compounding effect over your selected time horizon</p>
+          <div class="chart-container">
+            <canvas id="projectionChart"></canvas>
+          </div>
+        </div>
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Tax Drag Impact on Wealth</h3>
+          <p class="chart-subtitle">How much the initial tax bill costs over time</p>
+          <div class="chart-container">
+            <canvas id="taxDragChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROI Summary Cards -->
+      <div class="roi-summary-grid" id="roi-summary-cards">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Detailed strategy breakdown -->
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">Year-by-Year Breakdown</h3>
+        <div class="table-wrapper">
+          <table id="year-table" class="data-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ MONTE CARLO TAB ============ -->
+    <section id="panel-montecarlo" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px;">
+        <div class="section-header">
+          <h2>🎲 Monte Carlo Probability Analysis</h2>
+          <p class="section-desc">1,000 simulated outcomes showing probability ranges — because returns aren't guaranteed</p>
+        </div>
+        <div class="mc-controls">
+          <div class="input-group" style="display:inline-block;margin-right:16px;">
+            <label for="mcVolatility">Market Volatility (σ)</label>
+            <div class="input-wrapper">
+              <input type="number" id="mcVolatility" value="15" min="5" max="40" step="1" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+          <div class="input-group" style="display:inline-block;">
+            <label for="mcSimulations">Simulations</label>
+            <div class="input-wrapper">
+              <select id="mcSimulations">
+                <option value="500">500 runs</option>
+                <option value="1000" selected>1,000 runs</option>
+                <option value="5000">5,000 runs</option>
+              </select>
+            </div>
+          </div>
+          <button id="runMonteCarlo" class="mc-run-btn">▶ Run Simulation</button>
+        </div>
+      </div>
+
+      <div class="roi-charts-grid">
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Exchange Fund — Probability Cone</h3>
+          <p class="chart-subtitle">5th / 25th / 50th / 75th / 95th percentile outcomes</p>
+          <div class="chart-container">
+            <canvas id="mcExchangeChart"></canvas>
+          </div>
+        </div>
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Sell & Reinvest — Probability Cone</h3>
+          <p class="chart-subtitle">After-tax reinvested proceeds with volatility</p>
+          <div class="chart-container">
+            <canvas id="mcSellChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- MC Summary Stats -->
+      <div class="mc-stats-grid" id="mc-stats-grid" style="margin-top:24px;">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Sensitivity Analysis -->
+      <div class="glass-panel chart-panel" style="margin-top:24px;">
+        <h3 class="chart-title">📊 Sensitivity Analysis — Return Scenarios</h3>
+        <p class="chart-subtitle">How final wealth changes across different return assumptions</p>
+        <div class="chart-container">
+          <canvas id="sensitivityChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ INCOME & BREAKEVEN TAB ============ -->
+    <section id="panel-income" class="tab-panel">
+      <div class="roi-charts-grid">
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">💰 Annual Income Projection</h3>
+          <p class="chart-subtitle">Passive income streams from each strategy over time</p>
+          <div class="chart-container">
+            <canvas id="incomeChart"></canvas>
+          </div>
+        </div>
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">⏱️ Breakeven Analysis</h3>
+          <p class="chart-subtitle">When do tax-deferred strategies overtake selling?</p>
+          <div class="chart-container">
+            <canvas id="breakevenChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Income summary cards -->
+      <div class="roi-summary-grid" id="income-summary-cards" style="margin-top:24px;">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Cumulative income table -->
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">Cumulative Income Comparison</h3>
+        <p class="chart-subtitle">Total income received from each strategy over time</p>
+        <div class="chart-container">
+          <canvas id="cumulativeIncomeChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TAX STRATEGIES TAB ============ -->
+    <section id="panel-tax" class="tab-panel">
+      <div class="glass-panel chart-panel" style="margin-bottom:24px;">
+        <h3 class="chart-title">Immediate Tax Burden by Strategy</h3>
+        <p class="chart-subtitle">Negative values represent tax deductions/savings</p>
+        <div class="chart-container">
+          <canvas id="taxBarChart"></canvas>
+        </div>
+      </div>
+      <div class="tax-ideas-grid" id="tax-ideas-grid">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- ============ STATE RELOCATION TAB ============ -->
+    <section id="panel-relocation" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px;">
+        <div class="section-header">
+          <h2>🏠 State Relocation Tax Savings</h2>
+          <p class="section-desc">Compare your total tax savings by relocating to a tax-friendly state before liquidating</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="currentState">Current State</label>
+            <div class="input-wrapper">
+              <select id="currentState">
+                <option value="CA">California (13.3%)</option>
+                <option value="NY">New York (10.9%)</option>
+                <option value="NJ">New Jersey (10.75%)</option>
+                <option value="OR">Oregon (9.9%)</option>
+                <option value="MN">Minnesota (9.85%)</option>
+                <option value="HI">Hawaii (11%)</option>
+                <option value="VT">Vermont (8.75%)</option>
+                <option value="IA">Iowa (8.53%)</option>
+                <option value="CO">Colorado (4.4%)</option>
+                <option value="IL">Illinois (4.95%)</option>
+                <option value="MA">Massachusetts (9%)</option>
+                <option value="OTHER">Other (use State Rate above)</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="annualIncome">Annual Ordinary Income</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="annualIncome" value="500000" min="50000" step="25000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="yearsInNewState">Years After Relocation</label>
+            <div class="input-wrapper">
+              <input type="number" id="yearsInNewState" value="10" min="1" max="30" step="1" />
+              <span class="input-suffix">years</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- State comparison cards -->
+      <div class="relocation-grid" id="relocation-grid">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div class="glass-panel chart-panel" style="margin-top:24px;">
+        <h3 class="chart-title">Cumulative Tax Savings by Destination State</h3>
+        <p class="chart-subtitle">Total savings over time from relocating (cap gains + ongoing income tax)</p>
+        <div class="chart-container">
+          <canvas id="relocationChart"></canvas>
+        </div>
+      </div>
+
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">💡 Relocation Considerations</h3>
+        <div class="edu-tips-grid" id="relocation-tips">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 529 EDUCATION TAB ============ -->
+    <section id="panel-education" class="tab-panel">
+      <div class="glass-panel">
+        <div class="section-header">
+          <h2>🎓 529 Education Savings Planner</h2>
+          <p class="section-desc">Model your child's education costs and 529 plan growth</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="edu529Balance">Current 529 Balance</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="edu529Balance" value="50000" min="0" step="5000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="eduMonthlyContrib">Monthly Contribution</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="eduMonthlyContrib" value="500" min="0" step="50" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="eduChildAge">Child's Current Age</label>
+            <div class="input-wrapper">
+              <input type="number" id="eduChildAge" value="8" min="0" max="17" step="1" />
+              <span class="input-suffix">years</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="eduChildCount">Number of Children</label>
+            <div class="input-wrapper">
+              <input type="number" id="eduChildCount" value="1" min="1" max="6" step="1" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="eduType">University Type</label>
+            <div class="input-wrapper">
+              <select id="eduType">
+                <option value="public-in">Public University (In-State)</option>
+                <option value="public-out">Public University (Out-of-State)</option>
+                <option value="private">Private University</option>
+                <option value="elite">Elite Private (Ivy-Level)</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="edu529Return">Expected 529 Return</label>
+            <div class="input-wrapper">
+              <input type="number" id="edu529Return" value="6" min="1" max="12" step="0.5" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Education Results -->
+      <div class="edu-results-grid" id="edu-results" style="margin-top:24px;">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div class="glass-panel chart-panel" style="margin-top:24px;">
+        <h3 class="chart-title">529 Growth vs. Projected College Cost</h3>
+        <p class="chart-subtitle">Shows whether you're on track to cover tuition</p>
+        <div class="chart-container">
+          <canvas id="eduChart"></canvas>
+        </div>
+      </div>
+
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">💡 529 Tax Benefits & Strategies</h3>
+        <div class="edu-tips-grid" id="edu-tips-grid">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PLAYBOOK TAB ============ -->
+    <section id="panel-playbook" class="tab-panel">
+      <div class="playbook-hero glass-panel">
+        <div class="playbook-badge">MASTER PLANNER RECOMMENDATION</div>
+        <h2 class="playbook-title">The Optimal Hybrid Strategy</h2>
+        <p class="playbook-subtitle">
+          No single strategy is optimal in isolation. The highest-ROI, lowest-tax path
+          combines multiple tools — maximizing wealth, income, impact, and flexibility.
+        </p>
+      </div>
+
+      <div class="playbook-steps-grid" id="playbook-steps">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- New Ideas Section -->
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">🆕 Emerging & Advanced Strategies</h3>
+        <div class="new-ideas-grid" id="new-ideas-grid">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Projection chart for playbook -->
+      <div class="glass-panel chart-panel" style="margin-top:24px;">
+        <h3 class="chart-title">Hybrid Strategy Projected Outcome</h3>
+        <p class="chart-subtitle">Combined wealth trajectory with recommended allocation</p>
+        <div class="chart-container">
+          <canvas id="playbookChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Disclaimer -->
+      <div class="disclaimer-box">
+        <p>
+          ⚖️ <strong>Disclaimer:</strong> This analysis is for educational purposes only and does not constitute
+          financial, tax, or legal advice. Please consult a qualified CPA, estate attorney, and Registered
+          Investment Advisor before implementing any strategy. Tax laws change; all projections are estimates.
+        </p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer id="app-footer">
+    <p>Built for strategic wealth planning · All projections are estimates · Not financial advice</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
