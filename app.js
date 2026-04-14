@@ -22,6 +22,8 @@ let radarChart, projectionChart, taxDragChart, taxBarChart, eduChart, playbookCh
 let mcExchangeChart, mcSellChart, sensitivityChart;
 let incomeChart, breakevenChart, cumulativeIncomeChart;
 let relocationChart;
+let estateChart, transferChart;
+let retireDrawdownChart, retireIncomeChart;
 
 // ============ STRATEGIES ============
 function buildStrategies(stockValue, costBasis, capGainsRate) {
@@ -377,6 +379,8 @@ function rebuildCurrentTab(tab) {
     case 'tax': renderTaxTab(); break;
     case 'relocation': renderRelocation(); break;
     case 'education': renderEducation(); break;
+    case 'estate': renderEstate(); break;
+    case 'retirement': renderRetirement(); break;
     case 'playbook': renderPlaybook(); break;
   }
 }
@@ -1821,6 +1825,30 @@ function initInputListeners() {
     }
   });
 
+  // Estate inputs
+  const estateInputs = ['totalNetWorth', 'currentAge', 'filingStatus', 'estateGrowth', 'lifeExpectancy', 'numHeirs'];
+  estateInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', debounce(() => {
+        const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+        if (activeTab === 'estate') renderEstate();
+      }, 300));
+    }
+  });
+
+  // Retirement inputs
+  const retireInputs = ['retireAge', 'retireSpending', 'socialSecurity', 'otherRetireAssets', 'retireInflation', 'ssStartAge'];
+  retireInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', debounce(() => {
+        const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+        if (activeTab === 'retirement') renderRetirement();
+      }, 300));
+    }
+  });
+
   // Monte Carlo run button
   const mcBtn = document.getElementById('runMonteCarlo');
   if (mcBtn) {
@@ -1842,6 +1870,566 @@ function debounce(fn, delay) {
     clearTimeout(timer);
     timer = setTimeout(() => fn(...args), delay);
   };
+}
+
+// ============ ESTATE & WEALTH TRANSFER TAB ============
+const ESTATE_EXEMPTION_2025 = 13_610_000;  // per person
+const ESTATE_EXEMPTION_2026 = 7_000_000;   // after sunset
+const ESTATE_TAX_RATE = 0.40;
+const ANNUAL_GIFT_EXCLUSION = 18_000;      // per recipient per year
+
+const estateTips = [
+  {
+    title: 'Annual Gift Exclusion',
+    desc: `Gift up to $${(ANNUAL_GIFT_EXCLUSION).toLocaleString()} per recipient per year (${(ANNUAL_GIFT_EXCLUSION * 2).toLocaleString()} if married) completely tax-free. Over time, this removes substantial value from your taxable estate.`,
+    tag: 'Basic',
+  },
+  {
+    title: 'Grantor Retained Annuity Trust (GRAT)',
+    desc: 'Transfer appreciating assets into a GRAT. You receive annuity payments back, and any growth above the IRS hurdle rate passes to heirs gift-tax free. "Zeroed-out" GRATs have minimal gift tax cost.',
+    tag: 'Advanced',
+  },
+  {
+    title: 'Irrevocable Life Insurance Trust (ILIT)',
+    desc: 'Life insurance proceeds go directly to the trust, bypassing your taxable estate entirely. A $5M policy outside your estate saves $2M+ in estate taxes.',
+    tag: 'Insurance',
+  },
+  {
+    title: 'Spousal Lifetime Access Trust (SLAT)',
+    desc: 'Use your estate exemption NOW before the 2026 sunset. A SLAT lets you gift to an irrevocable trust that your spouse can still access — locking in the higher exemption.',
+    tag: '⚠️ 2026 Sunset',
+  },
+  {
+    title: 'Dynasty Trust (SD/NV)',
+    desc: 'Establish a perpetual trust in South Dakota or Nevada that avoids estate taxes across multiple generations. Assets compound tax-free for 100+ years.',
+    tag: 'Multi-Gen',
+  },
+  {
+    title: 'Charitable Lead Trust (CLT)',
+    desc: 'The trust pays income to charity for a set period, then the remainder passes to heirs at a reduced gift/estate tax value. Best when interest rates are low.',
+    tag: 'Charitable',
+  },
+  {
+    title: 'Family Limited Partnership (FLP)',
+    desc: 'Transfer business/investment assets into an FLP, then gift limited partnership interests at a discount (typically 25-35% valuation discount for lack of control/marketability).',
+    tag: 'Discount',
+  },
+  {
+    title: '2026 Exemption Sunset Warning',
+    desc: 'The current $13.61M exemption is scheduled to drop to ~$7M in 2026. If you haven\'t used your exemption, you should consider doing so before it sunset — the IRS has confirmed "no clawback" on gifts made under the higher exemption.',
+    tag: '⚠️ Critical',
+  },
+];
+
+function renderEstate() {
+  const netWorth = parseFloat(document.getElementById('totalNetWorth')?.value) || 5_000_000;
+  const currentAge = parseInt(document.getElementById('currentAge')?.value) || 55;
+  const filingStatus = document.getElementById('filingStatus')?.value || 'married';
+  const estateGrowth = (parseFloat(document.getElementById('estateGrowth')?.value) || 6) / 100;
+  const lifeExpect = parseInt(document.getElementById('lifeExpectancy')?.value) || 85;
+  const numHeirs = parseInt(document.getElementById('numHeirs')?.value) || 2;
+
+  const yearsToPass = Math.max(1, lifeExpect - currentAge);
+  const exemption = filingStatus === 'married' ? ESTATE_EXEMPTION_2025 * 2 : ESTATE_EXEMPTION_2025;
+  const exemption2026 = filingStatus === 'married' ? ESTATE_EXEMPTION_2026 * 2 : ESTATE_EXEMPTION_2026;
+
+  // Project estate value
+  const estateAtDeath = netWorth * Math.pow(1 + estateGrowth, yearsToPass);
+  const taxableEstate = Math.max(0, estateAtDeath - exemption);
+  const taxableEstate2026 = Math.max(0, estateAtDeath - exemption2026);
+  const estateTax = Math.round(taxableEstate * ESTATE_TAX_RATE);
+  const estateTax2026 = Math.round(taxableEstate2026 * ESTATE_TAX_RATE);
+  const toHeirsNoPlanning = estateAtDeath - estateTax2026;  // worst case
+  const toHeirsWithPlanning = estateAtDeath - estateTax;    // use current exemption
+  const perHeir = Math.round(toHeirsWithPlanning / numHeirs);
+
+  // Annual gifting impact
+  const annualGiftPerHeir = filingStatus === 'married' ? ANNUAL_GIFT_EXCLUSION * 2 : ANNUAL_GIFT_EXCLUSION;
+  const totalGifted = annualGiftPerHeir * numHeirs * yearsToPass;
+  const estateAfterGifting = Math.max(0, estateAtDeath - totalGifted);
+  const taxAfterGifting = Math.round(Math.max(0, estateAfterGifting - exemption) * ESTATE_TAX_RATE);
+
+  // Results cards
+  const resultsContainer = document.getElementById('estate-results');
+  if (resultsContainer) {
+    const cards = [
+      { label: 'Estate at Death', value: fmt(estateAtDeath), note: `Growing ${(estateGrowth*100).toFixed(0)}%/yr for ${yearsToPass} years`, color: '#6366f1' },
+      { label: 'Estate Tax (2026 Sunset)', value: fmt(estateTax2026), note: `40% rate on ${fmt(taxableEstate2026)} above ${fmt(exemption2026)} exemption`, color: '#ef4444' },
+      { label: 'To Heirs (No Planning)', value: fmt(toHeirsNoPlanning), note: `${fmt(Math.round(toHeirsNoPlanning / numHeirs))} per heir`, color: '#f59e0b' },
+      { label: 'Tax Saved with Planning', value: fmt(estateTax2026 - estateTax), note: `Using SLAT/gifts before sunset`, color: '#10b981' },
+    ];
+
+    resultsContainer.innerHTML = cards.map((c, i) => `
+      <div class="edu-result-card animate-in stagger-${i + 1}">
+        <div class="edu-result-label">${c.label}</div>
+        <div class="edu-result-value" style="color: ${c.color}">${c.value}</div>
+        <div class="edu-result-note">${c.note}</div>
+      </div>
+    `).join('');
+  }
+
+  // Estate chart — value & tax over time
+  const estCtx = document.getElementById('estateChart');
+  if (estCtx) {
+    if (estateChart) estateChart.destroy();
+    const ages = Array.from({ length: yearsToPass + 1 }, (_, i) => currentAge + i);
+    const estateValues = ages.map((_, i) => Math.round(netWorth * Math.pow(1 + estateGrowth, i)));
+    const taxExposure2026 = estateValues.map(v => Math.round(Math.max(0, v - exemption2026) * ESTATE_TAX_RATE));
+    const taxExposureCurrent = estateValues.map(v => Math.round(Math.max(0, v - exemption) * ESTATE_TAX_RATE));
+
+    estateChart = new Chart(estCtx, {
+      type: 'line',
+      data: {
+        labels: ages.map(a => 'Age ' + a),
+        datasets: [
+          { label: 'Estate Value', data: estateValues, borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.08)', fill: true, borderWidth: 2.5, tension: 0.3, pointRadius: 0 },
+          { label: 'Tax (After 2026 Sunset)', data: taxExposure2026, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', fill: true, borderWidth: 2, tension: 0.3, pointRadius: 0 },
+          { label: 'Tax (If Use Exemption Now)', data: taxExposureCurrent, borderColor: '#f59e0b', fill: false, borderWidth: 2, tension: 0.3, borderDash: [5, 3], pointRadius: 0 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+        },
+      },
+    });
+  }
+
+  // Transfer strategy comparison bar chart
+  const trCtx = document.getElementById('transferChart');
+  if (trCtx) {
+    if (transferChart) transferChart.destroy();
+    const strategies = [
+      { name: 'No Planning (2026)', net: toHeirsNoPlanning, color: '#ef4444' },
+      { name: 'Use Exemption Now', net: toHeirsWithPlanning, color: '#f59e0b' },
+      { name: 'Annual Gifting', net: estateAfterGifting - taxAfterGifting + totalGifted, color: '#10b981' },
+      { name: 'GRAT + Gifts', net: Math.round(estateAtDeath * 0.92), color: '#6366f1' },
+      { name: 'Dynasty Trust', net: Math.round(estateAtDeath * 0.95), color: '#8b5cf6' },
+      { name: 'SLAT + ILIT', net: Math.round(estateAtDeath * 0.93), color: '#0ea5e9' },
+    ];
+
+    transferChart = new Chart(trCtx, {
+      type: 'bar',
+      data: {
+        labels: strategies.map(s => s.name),
+        datasets: [{
+          label: 'Net to Heirs',
+          data: strategies.map(s => s.net),
+          backgroundColor: strategies.map(s => s.color + '60'),
+          borderColor: strategies.map(s => s.color),
+          borderWidth: 2,
+          borderRadius: 6,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        indexAxis: 'y',
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M' } },
+          y: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11, family: 'Inter' } } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `Net to heirs: ${fmtFull(ctx.parsed.x)}` } },
+        },
+      },
+    });
+  }
+
+  // Estate tips
+  const tipsContainer = document.getElementById('estate-tips');
+  if (tipsContainer) {
+    tipsContainer.innerHTML = estateTips.map(tip => `
+      <div class="edu-tip-card">
+        <div class="edu-tip-header">
+          <span class="edu-tip-title">${tip.title}</span>
+          <span class="edu-tip-tag">${tip.tag}</span>
+        </div>
+        <p class="edu-tip-desc">${tip.desc}</p>
+      </div>
+    `).join('');
+  }
+}
+
+// ============ RETIREMENT READINESS TAB ============
+const retireTips = [
+  {
+    title: 'The 4% Rule',
+    desc: 'The traditional "safe withdrawal rate" suggests withdrawing 4% of your portfolio in year one, adjusting for inflation each year. With a $2M portfolio, that\'s $80K/year. Modern research suggests 3.5% may be safer.',
+    tag: 'Fundamentals',
+  },
+  {
+    title: 'Social Security Timing',
+    desc: 'Each year you delay SS past 62 increases benefits ~7-8%. Waiting until 70 gives you 76% more than claiming at 62. If you\'re healthy and have other income, delaying is almost always optimal.',
+    tag: 'Critical',
+  },
+  {
+    title: 'Roth Conversion Ladder',
+    desc: 'In early retirement (before SS/RMDs), your tax bracket is likely lower. Convert Traditional IRA to Roth each year, filling up the 12% or 22% bracket. Saves massive taxes over your lifetime.',
+    tag: 'Tax Strategy',
+  },
+  {
+    title: 'Sequence of Returns Risk',
+    desc: 'A market crash in your first 5 years of retirement is devastating. Consider a "bond tent" (higher bond allocation at retirement, gradually shifting back to stocks) to mitigate this risk.',
+    tag: 'Risk',
+  },
+  {
+    title: 'Healthcare Bridge (Pre-65)',
+    desc: 'Before Medicare at 65, healthcare can cost $15-25K/year per person. Budget for ACA marketplace plans. Keeping income low via Roth withdrawals can qualify you for substantial ACA subsidies.',
+    tag: 'Healthcare',
+  },
+  {
+    title: 'Required Minimum Distributions',
+    desc: 'Starting at age 73 (75 for those born after 1960), you must take RMDs from Traditional IRAs/401ks. Plan ahead — RMDs can push you into higher tax brackets and increase Medicare premiums.',
+    tag: 'Compliance',
+  },
+];
+
+function renderRetirement() {
+  const { stockValue, costBasis, annualReturn, capGainsRate } = getInputs();
+  const currentAge = parseInt(document.getElementById('currentAge')?.value) || 55;
+  const retireAge = parseInt(document.getElementById('retireAge')?.value) || 60;
+  const spending = parseFloat(document.getElementById('retireSpending')?.value) || 150000;
+  const ssMo = parseFloat(document.getElementById('socialSecurity')?.value) || 3500;
+  const otherAssets = parseFloat(document.getElementById('otherRetireAssets')?.value) || 500000;
+  const inflation = (parseFloat(document.getElementById('retireInflation')?.value) || 3) / 100;
+  const ssStartAge = parseInt(document.getElementById('ssStartAge')?.value) || 67;
+  const strategies = buildStrategies(stockValue, costBasis, capGainsRate);
+
+  const yearsToRetire = Math.max(0, retireAge - currentAge);
+  const retirementYears = 95 - retireAge;  // plan to 95
+
+  // SS adjustment for claiming age
+  const ssMultiplier = ssStartAge === 62 ? 0.70 : ssStartAge === 65 ? 0.867 : ssStartAge === 67 ? 1.0 : 1.24;
+  const ssAnnual = Math.round(ssMo * 12 * ssMultiplier);
+
+  // Grow the stock position + other assets to retirement
+  const stockAtRetire = stockValue * Math.pow(1 + annualReturn * 0.935, yearsToRetire); // Exchange Fund growth
+  const otherAtRetire = otherAssets * Math.pow(1 + annualReturn * 0.8, yearsToRetire); // more conservative
+  const totalAtRetire = stockAtRetire + otherAtRetire;
+
+  // 4% rule check
+  const safeWithdrawal = totalAtRetire * 0.04;
+  const canRetire = safeWithdrawal + ssAnnual >= spending;
+
+  // Simulate drawdown
+  const ages = [];
+  const portfolioBalance = [];
+  const ssIncome = [];
+  const withdrawals = [];
+  let balance = totalAtRetire;
+
+  for (let yr = 0; yr <= retirementYears; yr++) {
+    const age = retireAge + yr;
+    ages.push(age);
+    portfolioBalance.push(Math.max(0, Math.round(balance)));
+
+    const inflatedSpending = spending * Math.pow(1 + inflation, yr);
+    const ss = age >= ssStartAge ? ssAnnual * Math.pow(1 + 0.02, yr) : 0; // SS with COLA
+    ssIncome.push(Math.round(ss));
+
+    const needed = Math.max(0, inflatedSpending - ss);
+    withdrawals.push(Math.round(needed));
+
+    // Deduct and grow
+    balance = (balance - needed) * (1 + annualReturn * 0.7); // conservative in retirement
+    if (balance < 0) balance = 0;
+  }
+
+  // Find when money runs out
+  let moneyLastsUntil = 95;
+  for (let i = 0; i < portfolioBalance.length; i++) {
+    if (portfolioBalance[i] <= 0) {
+      moneyLastsUntil = ages[i];
+      break;
+    }
+  }
+
+  // Results cards
+  const resultsContainer = document.getElementById('retire-results');
+  if (resultsContainer) {
+    const cards = [
+      { label: 'Portfolio at Retirement', value: fmt(totalAtRetire), note: `Stock (${fmt(stockAtRetire)}) + Other (${fmt(otherAtRetire)})`, color: '#6366f1' },
+      { label: '4% Safe Withdrawal', value: fmtFull(Math.round(safeWithdrawal)) + '/yr', note: safeWithdrawal + ssAnnual >= spending ? '✅ Covers spending!' : '⚠️ Gap: ' + fmtFull(Math.round(spending - safeWithdrawal - ssAnnual)) + '/yr', color: canRetire ? '#10b981' : '#ef4444' },
+      { label: 'Money Lasts Until', value: 'Age ' + moneyLastsUntil, note: moneyLastsUntil >= 95 ? '✅ Through age 95!' : '⚠️ Runs out ' + (95 - moneyLastsUntil) + ' years early', color: moneyLastsUntil >= 95 ? '#10b981' : '#ef4444' },
+      { label: 'SS Annual Income', value: fmtFull(ssAnnual) + '/yr', note: `Starting age ${ssStartAge} (${ssMultiplier < 1 ? Math.round((1-ssMultiplier)*100) + '% reduced' : ssMultiplier > 1 ? Math.round((ssMultiplier-1)*100) + '% bonus' : 'full benefit'})`, color: '#8b5cf6' },
+    ];
+
+    resultsContainer.innerHTML = cards.map((c, i) => `
+      <div class="edu-result-card animate-in stagger-${i + 1}">
+        <div class="edu-result-label">${c.label}</div>
+        <div class="edu-result-value" style="color: ${c.color}">${c.value}</div>
+        <div class="edu-result-note">${c.note}</div>
+      </div>
+    `).join('');
+  }
+
+  // Drawdown chart
+  const ddCtx = document.getElementById('retireDrawdownChart');
+  if (ddCtx) {
+    if (retireDrawdownChart) retireDrawdownChart.destroy();
+    retireDrawdownChart = new Chart(ddCtx, {
+      type: 'line',
+      data: {
+        labels: ages.map(a => 'Age ' + a),
+        datasets: [
+          { label: 'Portfolio Balance', data: portfolioBalance, borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, borderWidth: 2.5, tension: 0.3, pointRadius: 0 },
+          { label: 'Annual Withdrawal', data: withdrawals, borderColor: '#ef4444', fill: false, borderWidth: 2, tension: 0.3, borderDash: [5, 3], pointRadius: 0 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+        },
+      },
+    });
+  }
+
+  // Income sources stacked area
+  const incCtx = document.getElementById('retireIncomeChart');
+  if (incCtx) {
+    if (retireIncomeChart) retireIncomeChart.destroy();
+    retireIncomeChart = new Chart(incCtx, {
+      type: 'bar',
+      data: {
+        labels: ages.map(a => 'Age ' + a),
+        datasets: [
+          { label: 'Portfolio Withdrawal', data: withdrawals, backgroundColor: 'rgba(99,102,241,0.5)', borderColor: '#6366f1', borderWidth: 1, borderRadius: 2 },
+          { label: 'Social Security', data: ssIncome, backgroundColor: 'rgba(139,92,246,0.5)', borderColor: '#8b5cf6', borderWidth: 1, borderRadius: 2 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { stacked: true, grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1000).toFixed(0) + 'K' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtFull(ctx.parsed.y)}/yr` } },
+        },
+      },
+    });
+  }
+
+  // Retirement tips
+  const tipsContainer = document.getElementById('retire-tips');
+  if (tipsContainer) {
+    tipsContainer.innerHTML = retireTips.map(tip => `
+      <div class="edu-tip-card">
+        <div class="edu-tip-header">
+          <span class="edu-tip-title">${tip.title}</span>
+          <span class="edu-tip-tag">${tip.tag}</span>
+        </div>
+        <p class="edu-tip-desc">${tip.desc}</p>
+      </div>
+    `).join('');
+  }
+}
+
+// ============ SCENARIO SNAPSHOTS ============
+let savedSnapshots = JSON.parse(localStorage.getItem('wealthPlannerSnapshots') || '[]');
+
+function saveSnapshot() {
+  const inputs = getInputs();
+  const eduInputs = getEduInputs();
+  const strategies = buildStrategies(inputs.stockValue, inputs.costBasis, inputs.capGainsRate);
+  const gain = inputs.stockValue - inputs.costBasis;
+  const totalTax = Math.round(gain * inputs.capGainsRate);
+
+  const snapshot = {
+    id: Date.now(),
+    name: `Scenario ${savedSnapshots.length + 1}`,
+    date: new Date().toLocaleString(),
+    inputs: {
+      stockValue: inputs.stockValue,
+      costBasis: inputs.costBasis,
+      annualReturn: inputs.annualReturn * 100,
+      timeHorizon: inputs.timeHorizon,
+      taxBracket: inputs.taxBracket,
+      stateRate: inputs.stateRate * 100,
+    },
+    results: {
+      unrealizedGain: gain,
+      totalTax: totalTax,
+      afterTax: inputs.stockValue - totalTax,
+      exchangeFund20yr: Math.round(inputs.stockValue * Math.pow(1 + inputs.annualReturn * 0.935, inputs.timeHorizon)),
+      sellReinvest20yr: Math.round(strategies.sell.afterTax * Math.pow(1 + inputs.annualReturn, inputs.timeHorizon)),
+    },
+  };
+
+  savedSnapshots.push(snapshot);
+  localStorage.setItem('wealthPlannerSnapshots', JSON.stringify(savedSnapshots));
+  renderSnapshotList();
+  document.getElementById('snapshot-panel').classList.remove('hidden');
+
+  // Flash button
+  const btn = document.getElementById('saveSnapshotBtn');
+  btn.textContent = '✅ Saved!';
+  setTimeout(() => { btn.textContent = '📸 Save Scenario'; }, 1500);
+}
+
+function toggleSnapshots() {
+  const panel = document.getElementById('snapshot-panel');
+  panel.classList.toggle('hidden');
+  if (!panel.classList.contains('hidden')) renderSnapshotList();
+}
+
+function renderSnapshotList() {
+  const container = document.getElementById('snapshot-list');
+  if (!container) return;
+
+  if (savedSnapshots.length === 0) {
+    container.innerHTML = '<p class="snapshot-empty">No saved scenarios yet. Adjust parameters and click "Save Scenario".</p>';
+    return;
+  }
+
+  container.innerHTML = savedSnapshots.map(s => `
+    <div class="snapshot-card">
+      <div class="snapshot-card-title">${s.name}</div>
+      <div class="snapshot-card-meta">${s.date}</div>
+      <div class="snapshot-card-stats">
+        <div class="snapshot-stat">
+          <div class="snapshot-stat-label">Stock Value</div>
+          <div class="snapshot-stat-value" style="color:#6366f1">${fmt(s.inputs.stockValue)}</div>
+        </div>
+        <div class="snapshot-stat">
+          <div class="snapshot-stat-label">Cost Basis</div>
+          <div class="snapshot-stat-value" style="color:#f59e0b">${fmt(s.inputs.costBasis)}</div>
+        </div>
+        <div class="snapshot-stat">
+          <div class="snapshot-stat-label">Tax if Sold</div>
+          <div class="snapshot-stat-value" style="color:#ef4444">${fmt(s.results.totalTax)}</div>
+        </div>
+        <div class="snapshot-stat">
+          <div class="snapshot-stat-label">Exchange ${s.inputs.timeHorizon}yr</div>
+          <div class="snapshot-stat-value" style="color:#10b981">${fmt(s.results.exchangeFund20yr)}</div>
+        </div>
+      </div>
+      <div class="snapshot-actions">
+        <button class="snapshot-action-btn" onclick="loadSnapshot(${s.id})">Load</button>
+        <button class="snapshot-action-btn delete" onclick="deleteSnapshot(${s.id})">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function loadSnapshot(id) {
+  const s = savedSnapshots.find(s => s.id === id);
+  if (!s) return;
+
+  document.getElementById('stockValue').value = s.inputs.stockValue;
+  document.getElementById('costBasis').value = s.inputs.costBasis;
+  document.getElementById('annualReturn').value = s.inputs.annualReturn;
+  document.getElementById('timeHorizon').value = s.inputs.timeHorizon;
+  document.getElementById('stateRate').value = s.inputs.stateRate;
+
+  updateLiveSummary();
+  const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+  if (activeTab) rebuildCurrentTab(activeTab);
+}
+
+function deleteSnapshot(id) {
+  savedSnapshots = savedSnapshots.filter(s => s.id !== id);
+  localStorage.setItem('wealthPlannerSnapshots', JSON.stringify(savedSnapshots));
+  renderSnapshotList();
+}
+
+// ============ PDF EXPORT ============
+function exportPDF() {
+  const btn = document.getElementById('exportBtn');
+  btn.textContent = '⏳ Generating...';
+
+  const { stockValue, costBasis, annualReturn, timeHorizon, capGainsRate, stateRate } = getInputs();
+  const strategies = buildStrategies(stockValue, costBasis, capGainsRate);
+  const gain = stockValue - costBasis;
+  const totalTax = Math.round(gain * capGainsRate);
+  const afterTax = stockValue - totalTax;
+
+  const exchangeEnd = Math.round(stockValue * Math.pow(1 + annualReturn * 0.935, timeHorizon));
+  const sellEnd = Math.round(afterTax * Math.pow(1 + annualReturn, timeHorizon));
+  const crtEnd = Math.round(stockValue * Math.pow(1 + annualReturn * 0.94, timeHorizon));
+
+  const report = `
+<!DOCTYPE html>
+<html><head>
+<title>Wealth Strategy Report</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a1a2e; padding: 40px; max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 28px; color: #1e1b4b; margin-bottom: 4px; }
+  h2 { font-size: 16px; color: #6366f1; margin: 24px 0 12px; border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; }
+  .badge { font-size: 11px; color: #6366f1; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 600; }
+  .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 24px; }
+  .date { font-size: 12px; color: #9ca3af; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th { background: #f3f4f6; text-align: left; padding: 8px 12px; font-weight: 600; color: #4b5563; }
+  td { padding: 8px 12px; border-bottom: 1px solid #e5e7eb; }
+  .num { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; }
+  .green { color: #059669; } .red { color: #dc2626; } .blue { color: #4f46e5; }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .summary-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center; }
+  .summary-box .label { font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+  .summary-box .value { font-size: 20px; font-weight: 800; margin-top: 4px; font-family: 'Courier New', monospace; }
+  .disclaimer { font-size: 11px; color: #9ca3af; margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb; line-height: 1.6; }
+  @media print { body { padding: 20px; } }
+</style>
+</head><body>
+<div class="badge">◆ PRIVATE WEALTH STRATEGY ENGINE</div>
+<h1>What-If Scenario Report</h1>
+<p class="subtitle">Concentrated Stock Analysis · Tax Strategy Optimizer</p>
+<p class="date">Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+
+<h2>Scenario Parameters</h2>
+<div class="summary-grid">
+  <div class="summary-box"><div class="label">Stock Position</div><div class="value blue">${fmtFull(stockValue)}</div></div>
+  <div class="summary-box"><div class="label">Cost Basis</div><div class="value">${fmtFull(costBasis)}</div></div>
+  <div class="summary-box"><div class="label">Unrealized Gain</div><div class="value" style="color:#f59e0b">${fmtFull(gain)}</div></div>
+</div>
+<div class="summary-grid">
+  <div class="summary-box"><div class="label">Total Tax if Sold</div><div class="value red">${fmtFull(totalTax)}</div></div>
+  <div class="summary-box"><div class="label">After-Tax Proceeds</div><div class="value green">${fmtFull(afterTax)}</div></div>
+  <div class="summary-box"><div class="label">Time Horizon</div><div class="value">${timeHorizon} Years</div></div>
+</div>
+
+<h2>Strategy Comparison (${timeHorizon}-Year Projection)</h2>
+<table>
+  <tr><th>Strategy</th><th class="num">Tax Now</th><th class="num">Capital Deployed</th><th class="num">${timeHorizon}-Year Value</th><th class="num">vs Selling</th></tr>
+  <tr><td>Sell & Reinvest</td><td class="num red">${fmtFull(totalTax)}</td><td class="num">${fmtFull(afterTax)}</td><td class="num">${fmtFull(sellEnd)}</td><td class="num">—</td></tr>
+  <tr><td>⭐ Exchange Fund</td><td class="num green">$0</td><td class="num">${fmtFull(stockValue)}</td><td class="num blue">${fmtFull(exchangeEnd)}</td><td class="num green">+${fmtFull(exchangeEnd - sellEnd)}</td></tr>
+  <tr><td>Charitable Trust (CRT)</td><td class="num green">$0</td><td class="num">${fmtFull(stockValue)}</td><td class="num">${fmtFull(crtEnd)}</td><td class="num green">+${fmtFull(crtEnd - sellEnd)}</td></tr>
+  <tr><td>Opportunity Zone</td><td class="num green">$0</td><td class="num">${fmtFull(stockValue)}</td><td class="num">${fmtFull(Math.round(stockValue * Math.pow(1 + annualReturn * 1.1, timeHorizon) * 0.95))}</td><td class="num green">+${fmtFull(Math.round(stockValue * Math.pow(1 + annualReturn * 1.1, timeHorizon) * 0.95) - sellEnd)}</td></tr>
+</table>
+
+<h2>Key Recommendation</h2>
+<p style="font-size:14px;line-height:1.7;margin:8px 0;">Based on your <strong>${fmtFull(stockValue)}</strong> concentrated position with <strong>${fmtFull(gain)}</strong> in unrealized gains, the optimal approach is a <strong>hybrid strategy</strong>: allocate 50% to an Exchange Fund (tax-free diversification), 30% to a CRT (income stream + deduction), and 20% to Opportunity Zone + Collar (growth + liquidity). This preserves an estimated <strong>${fmtFull(exchangeEnd - sellEnd)}</strong> more wealth over ${timeHorizon} years compared to selling outright.</p>
+
+<p class="disclaimer">⚖️ <strong>Disclaimer:</strong> This report is for educational purposes only and does not constitute financial, tax, or legal advice. Please consult a qualified CPA, estate attorney, and Registered Investment Advisor before implementing any strategy. Tax laws change; all projections are estimates based on the parameters provided.</p>
+</body></html>`;
+
+  // Open in new window for printing
+  const win = window.open('', '_blank');
+  win.document.write(report);
+  win.document.close();
+
+  setTimeout(() => {
+    win.print();
+    btn.textContent = '📄 Export PDF';
+  }, 500);
 }
 
 // ============ INITIALIZATION ============

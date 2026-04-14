@@ -20,13 +20,39 @@
   <!-- Header -->
   <header id="app-header">
     <div class="header-inner">
-      <div class="header-badge">◆ PRIVATE WEALTH STRATEGY ENGINE</div>
-      <h1 class="header-title">What-If Scenario Planner</h1>
-      <p class="header-subtitle">
-        Concentrated Stock Analysis · Tax Strategy Optimizer · 529 Education Planning
-      </p>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div class="header-badge">◆ PRIVATE WEALTH STRATEGY ENGINE</div>
+          <h1 class="header-title">What-If Scenario Planner</h1>
+          <p class="header-subtitle">
+            Concentrated Stock Analysis · Tax Strategy Optimizer · Estate Planning · Retirement
+          </p>
+        </div>
+        <div class="header-actions">
+          <button id="saveSnapshotBtn" class="header-btn" onclick="saveSnapshot()">
+            📸 Save Scenario
+          </button>
+          <button id="compareBtn" class="header-btn" onclick="toggleSnapshots()">
+            ⚖️ Compare
+          </button>
+          <button id="exportBtn" class="header-btn btn-primary" onclick="exportPDF()">
+            📄 Export PDF
+          </button>
+        </div>
+      </div>
     </div>
   </header>
+
+  <!-- Snapshot Sidebar -->
+  <div id="snapshot-panel" class="snapshot-panel hidden">
+    <div class="snapshot-header">
+      <h3>📸 Saved Scenarios</h3>
+      <button onclick="toggleSnapshots()" class="snapshot-close">✕</button>
+    </div>
+    <div id="snapshot-list" class="snapshot-list">
+      <p class="snapshot-empty">No saved scenarios yet. Adjust parameters and click "Save Scenario".</p>
+    </div>
+  </div>
 
   <!-- Scenario Inputs -->
   <section id="scenario-inputs" class="glass-panel">
@@ -133,10 +159,16 @@
       <span class="tab-icon">🏠</span> State Relocation
     </button>
     <button class="tab-btn" data-tab="education" id="tab-education">
-      <span class="tab-icon">🎓</span> 529 Education Plan
+      <span class="tab-icon">🎓</span> 529 Education
+    </button>
+    <button class="tab-btn" data-tab="estate" id="tab-estate">
+      <span class="tab-icon">🏛️</span> Estate Transfer
+    </button>
+    <button class="tab-btn" data-tab="retirement" id="tab-retirement">
+      <span class="tab-icon">🏖️</span> Retirement
     </button>
     <button class="tab-btn" data-tab="playbook" id="tab-playbook">
-      <span class="tab-icon">🎯</span> Master Playbook
+      <span class="tab-icon">🎯</span> Playbook
     </button>
   </nav>
 
@@ -484,6 +516,177 @@
           financial, tax, or legal advice. Please consult a qualified CPA, estate attorney, and Registered
           Investment Advisor before implementing any strategy. Tax laws change; all projections are estimates.
         </p>
+      </div>
+    </section>
+
+    <!-- ============ ESTATE & WEALTH TRANSFER TAB ============ -->
+    <section id="panel-estate" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px;">
+        <div class="section-header">
+          <h2>🏛️ Estate & Wealth Transfer Planner</h2>
+          <p class="section-desc">Calculate estate tax exposure and compare wealth transfer strategies</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="totalNetWorth">Total Net Worth</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="totalNetWorth" value="5000000" min="500000" step="250000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="currentAge">Your Current Age</label>
+            <div class="input-wrapper">
+              <input type="number" id="currentAge" value="55" min="25" max="90" step="1" />
+              <span class="input-suffix">years</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="filingStatus">Filing Status</label>
+            <div class="input-wrapper">
+              <select id="filingStatus">
+                <option value="single">Single</option>
+                <option value="married" selected>Married Filing Jointly</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="estateGrowth">Expected Estate Growth</label>
+            <div class="input-wrapper">
+              <input type="number" id="estateGrowth" value="6" min="0" max="15" step="0.5" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="lifeExpectancy">Life Expectancy</label>
+            <div class="input-wrapper">
+              <input type="number" id="lifeExpectancy" value="85" min="60" max="100" step="1" />
+              <span class="input-suffix">years</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="numHeirs">Number of Heirs</label>
+            <div class="input-wrapper">
+              <input type="number" id="numHeirs" value="2" min="1" max="10" step="1" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Estate results -->
+      <div class="edu-results-grid" id="estate-results" style="margin-bottom:24px;">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div class="roi-charts-grid">
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Estate Value & Tax Exposure Over Time</h3>
+          <p class="chart-subtitle">With and without planning strategies</p>
+          <div class="chart-container">
+            <canvas id="estateChart"></canvas>
+          </div>
+        </div>
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Wealth Transfer Strategy Comparison</h3>
+          <p class="chart-subtitle">Net amount passed to heirs by method</p>
+          <div class="chart-container">
+            <canvas id="transferChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">💡 Estate Planning Strategies</h3>
+        <div class="edu-tips-grid" id="estate-tips">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ RETIREMENT READINESS TAB ============ -->
+    <section id="panel-retirement" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px;">
+        <div class="section-header">
+          <h2>🏖️ Retirement Readiness Calculator</h2>
+          <p class="section-desc">Can your concentrated stock fund your retirement? Model withdrawal strategies.</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="retireAge">Target Retirement Age</label>
+            <div class="input-wrapper">
+              <input type="number" id="retireAge" value="60" min="40" max="80" step="1" />
+              <span class="input-suffix">years</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="retireSpending">Annual Spending in Retirement</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="retireSpending" value="150000" min="30000" step="10000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="socialSecurity">Social Security (monthly)</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="socialSecurity" value="3500" min="0" step="100" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="otherRetireAssets">Other Retirement Assets</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="otherRetireAssets" value="500000" min="0" step="50000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="retireInflation">Inflation Rate</label>
+            <div class="input-wrapper">
+              <input type="number" id="retireInflation" value="3" min="1" max="8" step="0.5" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="ssStartAge">Social Security Start Age</label>
+            <div class="input-wrapper">
+              <select id="ssStartAge">
+                <option value="62">62 (reduced ~30%)</option>
+                <option value="65">65 (reduced ~13%)</option>
+                <option value="67" selected>67 (Full Retirement Age)</option>
+                <option value="70">70 (max +24% bonus)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Retirement results -->
+      <div class="edu-results-grid" id="retire-results" style="margin-bottom:24px;">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div class="roi-charts-grid">
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Portfolio Balance Through Retirement</h3>
+          <p class="chart-subtitle">Will your money last? Showing drawdown over time</p>
+          <div class="chart-container">
+            <canvas id="retireDrawdownChart"></canvas>
+          </div>
+        </div>
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Income Sources by Age</h3>
+          <p class="chart-subtitle">Portfolio withdrawals + Social Security + other income</p>
+          <div class="chart-container">
+            <canvas id="retireIncomeChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">💡 Retirement Strategy Tips</h3>
+        <div class="edu-tips-grid" id="retire-tips">
+          <!-- Rendered by JS -->
+        </div>
       </div>
     </section>
 
