@@ -9,6 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@latest/dist/chartjs-chart-sankey.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -245,15 +247,15 @@
           <h2>🎲 Monte Carlo Probability Analysis</h2>
           <p class="section-desc">1,000 simulated outcomes showing probability ranges — because returns aren't guaranteed</p>
         </div>
-        <div class="mc-controls">
-          <div class="input-group" style="display:inline-block;margin-right:16px;">
+        <div class="mc-controls" style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
+          <div class="input-group" style="flex:1; min-width:200px;">
             <label for="mcVolatility">Market Volatility (σ)</label>
             <div class="input-wrapper">
               <input type="number" id="mcVolatility" value="15" min="5" max="40" step="1" />
               <span class="input-suffix">%</span>
             </div>
           </div>
-          <div class="input-group" style="display:inline-block;">
+          <div class="input-group" style="flex:1; min-width:200px;">
             <label for="mcSimulations">Simulations</label>
             <div class="input-wrapper">
               <select id="mcSimulations">
@@ -263,7 +265,20 @@
               </select>
             </div>
           </div>
-          <button id="runMonteCarlo" class="mc-run-btn">▶ Run Simulation</button>
+          <div class="input-group" style="flex:1; min-width:250px;">
+            <label for="mcStressTest">Historical Stress Test ⚠️</label>
+            <div class="input-wrapper">
+              <select id="mcStressTest" style="border: 1px solid var(--accent-orange); color: var(--accent-orange);">
+                <option value="none">Normal Simulation (Random Walks)</option>
+                <option value="2008">2008 Financial Crisis (-38% yr1, +26% yr2, +15% yr3)</option>
+                <option value="dotcom">Dot-Com Crash (-10% yr1, -12% yr2, -22% yr3)</option>
+                <option value="1970s">1970s Stagflation (-10% real returns for 10 years)</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <button class="action-btn" id="runMonteCarlo" style="margin-bottom:2px;">▶ Run Simulation</button>
+          </div>
         </div>
       </div>
 
@@ -993,9 +1008,16 @@
       </div>
 
       <div class="roi-charts-grid">
+        <div class="glass-panel chart-panel" style="grid-column: 1 / -1;">
+          <h3 class="chart-title">Estate Wealth Flow (Sankey Matrix)</h3>
+          <p class="chart-subtitle">Mapping how your Gross Estate is distributed to unified credits, taxes, charity, and heirs</p>
+          <div class="chart-container" style="min-height: 400px;">
+            <canvas id="estateSankeyChart"></canvas>
+          </div>
+        </div>
         <div class="glass-panel chart-panel">
-          <h3 class="chart-title">Estate Value & Tax Exposure Over Time</h3>
-          <p class="chart-subtitle">With and without planning strategies</p>
+          <h3 class="chart-title">Estate Tax Comparison</h3>
+          <p class="chart-subtitle">Modeling tax liability based on the selected strategies</p>
           <div class="chart-container">
             <canvas id="estateChart"></canvas>
           </div>

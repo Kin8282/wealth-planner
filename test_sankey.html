@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@0.12.6/dist/chartjs-chart-sankey.min.js"></script>
+</head>
+<body>
+  <canvas id="myChart" width="800" height="400"></canvas>
+  <div id="out"></div>
+  <script>
+    try {
+      if (window.ChartSankey) Chart.register(window.ChartSankey);
+      const ctx = document.getElementById('myChart');
+      new Chart(ctx, {
+        type: 'sankey',
+        data: {
+          datasets: [{
+            label: 'My sankey',
+            data: [
+              {from: 'a', to: 'b', flow: 10},
+              {from: 'a', to: 'c', flow: 5},
+              {from: 'b', to: 'c', flow: 10},
+              {from: 'd', to: 'c', flow: 7}
+            ],
+            colorFrom: c => 'red',
+            colorTo: c => 'blue',
+            colorMode: 'gradient'
+          }]
+        }
+      });
+      document.getElementById('out').innerText = "SUCCESS";
+    } catch(e) {
+      document.getElementById('out').innerText = "ERROR: " + e.message;
+    }
+  </script>
+</body>
+</html>
