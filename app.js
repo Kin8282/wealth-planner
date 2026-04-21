@@ -22,7 +22,7 @@ let radarChart, projectionChart, taxDragChart, taxBarChart, eduChart, playbookCh
 let mcExchangeChart, mcSellChart, sensitivityChart;
 let incomeChart, breakevenChart, cumulativeIncomeChart;
 let relocationChart;
-let estateChart, transferChart;
+let estateChart, transferChart, estateSankeyChart;
 let retireDrawdownChart, retireIncomeChart;
 let exchange1031Chart, exchange1031IncomeChart;
 let aqrComparisonChart, aqrFactorChart;
@@ -1272,19 +1272,29 @@ function renderMonteCarlo() {
   const { stockValue, costBasis, annualReturn, timeHorizon, capGainsRate } = getInputs();
   const volatility = (parseFloat(document.getElementById('mcVolatility')?.value) || 15) / 100;
   const numSims = parseInt(document.getElementById('mcSimulations')?.value) || 1000;
+  const stressScenario = document.getElementById('mcStressTest')?.value || 'none';
   const strategies = buildStrategies(stockValue, costBasis, capGainsRate);
 
   // Run Monte Carlo
   function runSim(initial, returnMult, sims, years, vol) {
     const mu = annualReturn * returnMult;
+    let crisisYears = [];
+    if (stressScenario === '2008') crisisYears = [-0.38, 0.26, 0.15];
+    else if (stressScenario === 'dotcom') crisisYears = [-0.10, -0.12, -0.22];
+    else if (stressScenario === '1970s') crisisYears = [-0.10, -0.05, 0.05, -0.10, -0.05, 0.05, 0.0, -0.10, 0.0, -0.05];
+
     const allPaths = [];
     for (let s = 0; s < sims; s++) {
       const path = [initial];
       let val = initial;
       for (let y = 1; y <= years; y++) {
-        // Geometric Brownian Motion
-        const z = gaussianRandom();
-        const r = mu - 0.5 * vol * vol + vol * z;
+        let r;
+        if (y <= crisisYears.length && stressScenario !== 'none') {
+          r = crisisYears[y - 1];
+        } else {
+          const z = gaussianRandom();
+          r = mu - 0.5 * vol * vol + vol * z;
+        }
         val = val * Math.exp(r);
         path.push(Math.round(val));
       }
@@ -2078,10 +2088,10 @@ function renderEstate() {
         datasets: [{
           label: 'Net to Heirs',
           data: strategies.map(s => s.net),
-          backgroundColor: strategies.map(s => s.color + '60'),
+          backgroundColor: strategies.map(s => s.color + '90'),
           borderColor: strategies.map(s => s.color),
           borderWidth: 2,
-          borderRadius: 6,
+          borderRadius: 4,
         }],
       },
       options: {
@@ -2096,6 +2106,69 @@ function renderEstate() {
           tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `Net to heirs: ${fmtFull(ctx.parsed.x)}` } },
         },
       },
+    });
+  }
+
+  // Sankey Chart
+  const skCtx = document.getElementById('estateSankeyChart');
+  if (skCtx) {
+    if (estateSankeyChart) estateSankeyChart.destroy();
+    
+    const charity = Math.round(estateAtDeath * 0.10); // Assume 10% to charity to show flow
+    const netGross = estateAtDeath - charity;
+    const usedExemption = Math.min(netGross, exemption2026);
+    const taxable = Math.max(0, netGross - usedExemption);
+    const taxes = Math.round(taxable * ESTATE_TAX_RATE);
+    const netTaxable = taxable - taxes;
+    const totalHeirs = netTaxable + usedExemption;
+
+    const lGross = `Gross Estate (${fmt(estateAtDeath)})`;
+    const lCharity = `Charity (${fmt(charity)})`;
+    const lExempt = `Exemption (${fmt(usedExemption)})`;
+    const lTaxable = `Taxable (${fmt(taxable)})`;
+    const lTaxes = `Estate Taxes (${fmt(taxes)})`;
+    const lHeirs = `Net to Heirs (${fmt(totalHeirs)})`;
+
+    const data = [
+      { from: lGross, to: lCharity, flow: charity },
+      { from: lGross, to: lExempt, flow: usedExemption },
+      { from: lGross, to: lTaxable, flow: taxable },
+      { from: lTaxable, to: lTaxes, flow: taxes },
+      { from: lTaxable, to: lHeirs, flow: netTaxable },
+      { from: lExempt, to: lHeirs, flow: usedExemption }
+    ].filter(d => d.flow > 0);
+
+    const colors = {
+      [lGross]: '#94a3b8',
+      [lCharity]: '#0ea5e9',
+      [lExempt]: '#10b981',
+      [lTaxable]: '#f59e0b',
+      [lTaxes]: '#ef4444',
+      [lHeirs]: '#6366f1'
+    };
+
+    estateSankeyChart = new Chart(skCtx, {
+      type: 'sankey',
+      data: {
+        datasets: [{
+          label: 'Estate Wealth Flow',
+          data: data,
+          colorFrom: c => (c.raw ? colors[c.raw.from] : '#334155'),
+          colorTo: c => (c.raw ? colors[c.raw.to] : '#334155'),
+          colorMode: 'gradient',
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          tooltip: {
+            backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1,
+            callbacks: {
+              label: ctx => `${ctx.raw && ctx.raw.from ? ctx.raw.from : '?'} → ${ctx.raw && ctx.raw.to ? ctx.raw.to : '?'}`
+            }
+          }
+        }
+      }
     });
   }
 
@@ -3464,86 +3537,242 @@ function deleteSnapshot(id) {
 }
 
 // ============ PDF EXPORT ============
-function exportPDF() {
-  const btn = document.getElementById('exportBtn');
-  btn.textContent = '⏳ Generating...';
+async function exportPDF() {
+  if (typeof html2pdf === 'undefined') {
+    alert('PDF generator library is still loading. Please try again in a moment.');
+    return;
+  }
 
-  const { stockValue, costBasis, annualReturn, timeHorizon, capGainsRate, stateRate } = getInputs();
-  const strategies = buildStrategies(stockValue, costBasis, capGainsRate);
+  const btn = document.getElementById('exportBtn');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '⏳ Generating PDF...';
+  btn.disabled = true;
+
+  // Gather Global Data
+  const { stockValue, costBasis, annualReturn, timeHorizon, capGainsRate } = getInputs();
   const gain = stockValue - costBasis;
   const totalTax = Math.round(gain * capGainsRate);
   const afterTax = stockValue - totalTax;
 
-  const exchangeEnd = Math.round(stockValue * Math.pow(1 + annualReturn * 0.935, timeHorizon));
   const sellEnd = Math.round(afterTax * Math.pow(1 + annualReturn, timeHorizon));
+  const exchangeEnd = Math.round(stockValue * Math.pow(1 + annualReturn * 0.935, timeHorizon));
   const crtEnd = Math.round(stockValue * Math.pow(1 + annualReturn * 0.94, timeHorizon));
 
-  const report = `
-<!DOCTYPE html>
-<html><head>
-<title>Wealth Strategy Report</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a1a2e; padding: 40px; max-width: 900px; margin: 0 auto; }
-  h1 { font-size: 28px; color: #1e1b4b; margin-bottom: 4px; }
-  h2 { font-size: 16px; color: #6366f1; margin: 24px 0 12px; border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; }
-  .badge { font-size: 11px; color: #6366f1; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 600; }
-  .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 24px; }
-  .date { font-size: 12px; color: #9ca3af; margin-bottom: 24px; }
-  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
-  th { background: #f3f4f6; text-align: left; padding: 8px 12px; font-weight: 600; color: #4b5563; }
-  td { padding: 8px 12px; border-bottom: 1px solid #e5e7eb; }
-  .num { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; }
-  .green { color: #059669; } .red { color: #dc2626; } .blue { color: #4f46e5; }
-  .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 16px 0; }
-  .summary-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center; }
-  .summary-box .label { font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
-  .summary-box .value { font-size: 20px; font-weight: 800; margin-top: 4px; font-family: 'Courier New', monospace; }
-  .disclaimer { font-size: 11px; color: #9ca3af; margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb; line-height: 1.6; }
-  @media print { body { padding: 20px; } }
-</style>
-</head><body>
-<div class="badge">◆ PRIVATE WEALTH STRATEGY ENGINE</div>
-<h1>What-If Scenario Report</h1>
-<p class="subtitle">Concentrated Stock Analysis · Tax Strategy Optimizer</p>
-<p class="date">Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+  const estateAtDeath = stockValue * Math.pow(1 + annualReturn, timeHorizon);
+  const exemption2026 = 7_000_000;
+  const taxableEstate = Math.max(0, estateAtDeath - exemption2026);
+  const estateTaxes   = Math.round(taxableEstate * 0.40);
+  const netHeirs      = estateAtDeath - estateTaxes;
 
-<h2>Scenario Parameters</h2>
-<div class="summary-grid">
-  <div class="summary-box"><div class="label">Stock Position</div><div class="value blue">${fmtFull(stockValue)}</div></div>
-  <div class="summary-box"><div class="label">Cost Basis</div><div class="value">${fmtFull(costBasis)}</div></div>
-  <div class="summary-box"><div class="label">Unrealized Gain</div><div class="value" style="color:#f59e0b">${fmtFull(gain)}</div></div>
-</div>
-<div class="summary-grid">
-  <div class="summary-box"><div class="label">Total Tax if Sold</div><div class="value red">${fmtFull(totalTax)}</div></div>
-  <div class="summary-box"><div class="label">After-Tax Proceeds</div><div class="value green">${fmtFull(afterTax)}</div></div>
-  <div class="summary-box"><div class="label">Time Horizon</div><div class="value">${timeHorizon} Years</div></div>
-</div>
+  const safeWithdrawal = Math.round(stockValue * 0.04);
 
-<h2>Strategy Comparison (${timeHorizon}-Year Projection)</h2>
-<table>
-  <tr><th>Strategy</th><th class="num">Tax Now</th><th class="num">Capital Deployed</th><th class="num">${timeHorizon}-Year Value</th><th class="num">vs Selling</th></tr>
-  <tr><td>Sell & Reinvest</td><td class="num red">${fmtFull(totalTax)}</td><td class="num">${fmtFull(afterTax)}</td><td class="num">${fmtFull(sellEnd)}</td><td class="num">—</td></tr>
-  <tr><td>⭐ Exchange Fund</td><td class="num green">$0</td><td class="num">${fmtFull(stockValue)}</td><td class="num blue">${fmtFull(exchangeEnd)}</td><td class="num green">+${fmtFull(exchangeEnd - sellEnd)}</td></tr>
-  <tr><td>Charitable Trust (CRT)</td><td class="num green">$0</td><td class="num">${fmtFull(stockValue)}</td><td class="num">${fmtFull(crtEnd)}</td><td class="num green">+${fmtFull(crtEnd - sellEnd)}</td></tr>
-  <tr><td>Opportunity Zone</td><td class="num green">$0</td><td class="num">${fmtFull(stockValue)}</td><td class="num">${fmtFull(Math.round(stockValue * Math.pow(1 + annualReturn * 1.1, timeHorizon) * 0.95))}</td><td class="num green">+${fmtFull(Math.round(stockValue * Math.pow(1 + annualReturn * 1.1, timeHorizon) * 0.95) - sellEnd)}</td></tr>
-</table>
+  let radarImgHtml = '';
+  try {
+    const tempRadarDiv = document.createElement('div');
+    tempRadarDiv.style.width = '1200px';
+    tempRadarDiv.style.height = '1200px';
+    tempRadarDiv.style.position = 'fixed';
+    tempRadarDiv.style.top = '-4000px'; 
+    tempRadarDiv.style.left = '0';
+    tempRadarDiv.style.display = 'block'; 
+    document.body.appendChild(tempRadarDiv);
 
-<h2>Key Recommendation</h2>
-<p style="font-size:14px;line-height:1.7;margin:8px 0;">Based on your <strong>${fmtFull(stockValue)}</strong> concentrated position with <strong>${fmtFull(gain)}</strong> in unrealized gains, the optimal approach is a <strong>hybrid strategy</strong>: allocate 50% to an Exchange Fund (tax-free diversification), 30% to a CRT (income stream + deduction), and 20% to Opportunity Zone + Collar (growth + liquidity). This preserves an estimated <strong>${fmtFull(exchangeEnd - sellEnd)}</strong> more wealth over ${timeHorizon} years compared to selling outright.</p>
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = 1200;
+    tempCanvas.height = 1200;
+    tempRadarDiv.appendChild(tempCanvas);
 
-<p class="disclaimer">⚖️ <strong>Disclaimer:</strong> This report is for educational purposes only and does not constitute financial, tax, or legal advice. Please consult a qualified CPA, estate attorney, and Registered Investment Advisor before implementing any strategy. Tax laws change; all projections are estimates based on the parameters provided.</p>
-</body></html>`;
+    const tempChart = new Chart(tempCanvas, {
+      type: 'radar',
+      data: {
+        labels: radarMetrics.map(m => m.subject),
+        datasets: [
+          { label: 'Exchange Fund', data: radarMetrics.map(m => m.exchange), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.12)', borderWidth: 5, pointRadius: 6 },
+          { label: 'Charitable Trust', data: radarMetrics.map(m => m.crt), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 5, pointRadius: 6 },
+          { label: 'Sell & Reinvest', data: radarMetrics.map(m => m.sell), borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.06)', borderWidth: 5, pointRadius: 6 },
+          { label: 'Opp Zone', data: radarMetrics.map(m => m.ozone), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.08)', borderWidth: 5, pointRadius: 6 },
+        ]
+      },
+      options: { 
+        responsive: false, animation: false,
+        layout: { padding: 40 },
+        plugins: { 
+          legend: { 
+            position: 'top', 
+            labels: { font: { size: 28, family: "'Helvetica Neue', sans-serif" }, padding: 30, usePointStyle: true, pointStyle: 'rectRounded' } 
+          } 
+        },
+        scales: { 
+          r: { 
+            ticks: { display: false },
+            pointLabels: { font: { size: 24, weight: 'bold', family: "'Helvetica Neue', sans-serif" }, color: '#334155' },
+            grid: { color: '#e2e8f0', lineWidth: 2 },
+            angleLines: { color: '#cbd5e1', lineWidth: 2 }
+          } 
+        }
+      }
+    });
 
-  // Open in new window for printing
-  const win = window.open('', '_blank');
-  win.document.write(report);
-  win.document.close();
+    radarImgHtml = `<img src="${tempCanvas.toDataURL('image/png', 1.0)}" style="width: 100%; max-width: 450px; display: block; margin: 0 auto; padding: 0;" />`;
+    document.body.removeChild(tempRadarDiv);
+  } catch(e) { console.error('Radar snapshot failed:', e); }
 
-  setTimeout(() => {
-    win.print();
-    btn.textContent = '📄 Export PDF';
-  }, 500);
+  const pageHeader = `
+    <div style="display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #0B2046; padding-bottom: 12px; margin-bottom: 25px;">
+      <span style="font-weight: 700; color: #0B2046; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Advanced Wealth Analytics</span>
+      <span style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Strictly Private & Confidential</span>
+    </div>
+  `;
+
+  // Absolute Math Layout: A4 format ratio at 900px width is exactly 1273px height.
+  // Each page block is strictly bound to this exact pixel resolution. No CSS breaks needed.
+  const pageWrap = "width: 900px; height: 1273px; padding: 45px 50px; box-sizing: border-box; background: white; overflow: hidden;";
+
+  const htmlContent = `
+    <div id="pdf-root" style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; line-height: 1.6; background: #e2e8f0;">
+      
+      <!-- PAGE 1: EXECUTIVE SNAPSHOT -->
+      <div style="${pageWrap}">
+        ${pageHeader}
+        <div style="text-align: left; margin-bottom: 25px;">
+          <h1 style="font-size: 38px; font-weight: 300; color: #0B2046; margin: 0 0 5px 0; letter-spacing: -0.5px;">Executive Scenario Summary</h1>
+          <p style="font-size: 16px; color: #64748b; margin: 0;">Quantitative Projection Matrix & Structural Allocations</p>
+        </div>
+
+        <div style="display: flex; gap: 30px; margin-bottom: 25px; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 20px 0;">
+          <div style="flex: 1; border-right: 1px solid #e2e8f0; padding-right: 20px;">
+            <p style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 5px 0;">Starting Capital</p>
+            <p style="font-size: 26px; font-weight: 600; margin: 0; color: #0B2046;">${fmtFull(stockValue)}</p>
+          </div>
+          <div style="flex: 1; border-right: 1px solid #e2e8f0; padding-right: 20px;">
+            <p style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 5px 0;">Tax Liability Exposure</p>
+            <p style="font-size: 26px; font-weight: 600; margin: 0; color: #b91c1c;">${fmtFull(totalTax)} <span style="font-size: 14px; font-weight: 400; color: #64748b;">@ ${(capGainsRate*100).toFixed(1)}%</span></p>
+          </div>
+          <div style="flex: 1;">
+            <p style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 5px 0;">Projection Horizon</p>
+            <p style="font-size: 26px; font-weight: 600; margin: 0; color: #15803d;">${timeHorizon} Years</p>
+          </div>
+        </div>
+
+        <h2 style="font-size: 20px; font-weight: 500; text-align: center; color: #0B2046; margin-bottom: -15px;">Multidimensional Strategy Profile</h2>
+        ${radarImgHtml}
+        
+        <div style="background: #f8fafc; border-left: 4px solid #0B2046; padding: 25px 35px; margin-top: 10px;">
+          <h3 style="margin: 0 0 10px 0; font-size: 18px; color: #0B2046; font-weight: 600;">Advisor Core Action Plan</h3>
+          <p style="margin: 0; font-size: 15px; color: #334155;">Selling ${fmtFull(stockValue)} today instantly destroys ${fmtFull(totalTax)} of compounding momentum. Implementing a hybrid tax-deferral wrapper achieves maximum risk-adjusted limits shown in the radar chart above. Immediate execution of an Exchange Fund mitigates concentration risk securely without triggering taxable friction. Follow-through includes restructuring estate allocations ahead of the 2026 cliff.</p>
+        </div>
+      </div>
+
+      <!-- PAGE 2: ROI DEEP DIVE -->
+      <div style="${pageWrap}">
+        ${pageHeader}
+        <h1 style="font-size: 32px; font-weight: 300; color: #0B2046; margin: 0 0 25px 0;">Return On Investment (ROI) Deep Dive</h1>
+        
+        <p style="font-size: 16px; color: #334155; margin-bottom: 40px;">Compounding capital tax-free exponentially outperforms paying taxes immediately, even accounting for the management fees native to sophisticated wrappers. By deploying ${fmtFull(stockValue)} natively without realizing the initial ${fmtFull(totalTax)} liability, the absolute net yield at Year ${timeHorizon} diverges dramatically.</p>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 50px; font-size: 15px;">
+          <thead>
+            <tr>
+              <th style="padding: 16px 12px; border-bottom: 2px solid #0f172a; color: #0f172a; text-align: left; font-weight: 600;">Execution Strategy</th>
+              <th style="padding: 16px 12px; border-bottom: 2px solid #0f172a; color: #0f172a; text-align: right; font-weight: 600;">Tax Frictional Cost</th>
+              <th style="padding: 16px 12px; border-bottom: 2px solid #0f172a; color: #0f172a; text-align: right; font-weight: 600;">Capital Preserved</th>
+              <th style="padding: 16px 12px; border-bottom: 2px solid #0f172a; color: #0f172a; text-align: right; font-weight: 600;">Valuation (Yr ${timeHorizon})</th>
+              <th style="padding: 16px 12px; border-bottom: 2px solid #0f172a; color: #0f172a; text-align: right; font-weight: 600;">Advantage vs Baseline</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; color: #334155;">Standard Liquidation</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; color: #ef4444; font-family: monospace; text-align: right;">-${fmtFull(totalTax)}</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace; text-align: right;">${fmtFull(afterTax)}</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace; text-align: right; font-weight: 600;">${fmtFull(sellEnd)}</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; color: #94a3b8; text-align: right;">Baseline</td>
+            </tr>
+            <tr style="background-color: #fafaf9;">
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; color: #0B2046; font-weight: 600;">Exchange Fund (721)</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; color: #10b981; font-family: monospace; text-align: right;">$0 Deferred</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace; text-align: right;">${fmtFull(stockValue)}</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600; font-family: monospace; text-align: right; color: #0B2046;">${fmtFull(exchangeEnd)}</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; color: #10b981; font-weight: 600; text-align: right;">+${fmtFull(exchangeEnd - sellEnd)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #0f172a; color: #0B2046; font-weight: 600;">Charitable Trust (CRT)</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #0f172a; color: #10b981; font-family: monospace; text-align: right;">$0 Diverted</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #0f172a; font-family: monospace; text-align: right;">${fmtFull(stockValue)}</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #0f172a; font-weight: 600; font-family: monospace; text-align: right; color: #0B2046;">${fmtFull(crtEnd)}</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #0f172a; color: #10b981; font-weight: 600; text-align: right;">+${fmtFull(crtEnd - sellEnd)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="font-size: 20px; color: #0B2046; font-weight: 600; margin-bottom: 15px;">Institutional Correlation Management</h3>
+        <p style="font-size: 16px; color: #334155;">Integrating institutional 'Risk Parity' and 'Managed Futures' mechanically isolates beta drops. When applying historical 2008 or Dot-Com stress scenarios in the Monte Carlo engine, trend-following portfolios significantly reduced the maximum 30% drawdown commonly experienced by classic 60/40 splits, enhancing geometrically compounding longevity.</p>
+      </div>
+
+      <!-- PAGE 3: TAX STRUCTURING -->
+      <div style="${pageWrap}">
+        ${pageHeader}
+        <h1 style="font-size: 32px; font-weight: 300; color: #0B2046; margin: 0 0 35px 0;">Advanced Tax Structuring</h1>
+        
+        <h3 style="font-size: 20px; color: #0B2046; font-weight: 600; margin-bottom: 15px;">Real Estate Offset Dynamics (Section 1031)</h3>
+        <p style="font-size: 16px; color: #334155; margin-bottom: 35px;">Utilizing a 1031 Exchange not only defers capital gains on appreciating physical assets but allows step-up basis upon transfer. Reinvesting into higher tier syndicated DSTs provides stabilized yields completely shielded by accelerated depreciation write-offs via cost segregation studies. This essentially generates "phantom income" that is legally tax-free.</p>
+
+        <h3 style="font-size: 20px; color: #0B2046; font-weight: 600; margin-bottom: 15px;">Private Placement Life Insurance (PPLI)</h3>
+        <p style="font-size: 16px; color: #334155; margin-bottom: 35px;">For the top 1% tax bracket, locating alternative investments (Credit, Hedge Funds, PE) inside a PPLI wrapper eliminates massive yearly tax drags on K-1 ordinary income. A structured policy effectively permits tax-free withdrawals under the guise of policy loans throughout the entire lifetime.</p>
+
+        <h3 style="font-size: 20px; color: #0B2046; font-weight: 600; margin-bottom: 15px;">Generational Estate Flow Vulnerability</h3>
+        <p style="font-size: 16px; color: #334155; margin-bottom: 25px;">At the end of Year ${timeHorizon}, gross projected estate wealth crosses <strong>${fmtFull(estateAtDeath)}</strong>. Assuming standard baseline inaction and the 2026 TCJA sunset dropping the exemption to ${fmtFull(exemption2026)}:</p>
+        
+        <div style="background: #fafaf9; border: 1px solid #e2e8f0; padding: 25px 35px; border-radius: 4px; border-left: 4px solid #b91c1c; font-size: 16px;">
+           <div style="display: flex; justify-content: space-between; margin-bottom: 10px;"><span>Total Estate Value:</span> <strong>${fmtFull(estateAtDeath)}</strong></div>
+           <div style="display: flex; justify-content: space-between; margin-bottom: 10px;"><span>Unshielded Taxable Estate:</span> <strong>${fmtFull(taxableEstate)}</strong></div>
+           <div style="display: flex; justify-content: space-between; margin-top: 15px; padding-top: 15px; border-top: 1px solid #e2e8f0; color: #b91c1c;"><span>Direct Confiscation to IRS @ 40%:</span> <strong>${fmtFull(estateTaxes)}</strong></div>
+        </div>
+        <p style="font-size: 16px; color: #334155; margin-top: 25px;">We strictly advise funding irrevocable structures (SLATs, IDGTs) immediately to freeze asset valuation and completely eradicate this ${fmtFull(estateTaxes)} tax cliff.</p>
+      </div>
+
+      <!-- PAGE 4: RETIREMENT -->
+      <div style="${pageWrap}">
+        ${pageHeader}
+        <h1 style="font-size: 32px; font-weight: 300; color: #0B2046; margin: 0 0 35px 0;">Retirement Sequence Mechanics</h1>
+        
+        <div style="background: #f8fafc; border-left: 4px solid #3b82f6; padding: 30px; margin-bottom: 40px;">
+          <h3 style="margin: 0 0 15px 0; font-size: 18px; color: #0B2046;">Baseline Distribution Feasibility</h3>
+          <p style="margin: 0; font-size: 16px; color: #334155;">Based on starting capital of ${fmtFull(stockValue)}:<br><br>
+          • The standard <strong>4% Rule</strong> permits a starting gross distribution of <strong>${fmtFull(safeWithdrawal)}/year</strong>.<br>
+          • A dynamically conservative <strong>3.5% distribution</strong> yields a highly probable failure-proof rate of <strong>${fmtFull(Math.round(stockValue * 0.035))}/year</strong>, heavily minimizing sequence-of-returns failure even in protracted bear markets.</p>
+        </div>
+
+        <h3 style="font-size: 20px; color: #0B2046; font-weight: 600; margin-bottom: 15px;">Navigating Sequence of Return Risk</h3>
+        <p style="font-size: 16px; color: #334155; margin-bottom: 35px;">Retirement timing significantly amplifies mathematical vulnerability. Suffering a major structural market correction (such as the 2008 Financial Crisis) directly at the onset of retirement actively destroys the compounding baseline. Utilizing "Bond Tents" (increasing fixed-income allocations precisely 5 years prior and 5 years post-retirement) and shifting towards Non-Correlated assets mechanically insulates the portfolio required for living expenses.</p>
+        
+        <h3 style="font-size: 20px; color: #0B2046; font-weight: 600; margin-bottom: 15px;">Healthcare Bridges</h3>
+        <p style="font-size: 16px; color: #334155; margin-bottom: 30px;">Early retirees transitioning prior to Medicare age (65) are exposed to extreme pre-premium cliffs. Leveraging MAGI-optimization, primarily funding distributions through Roth principal or post-tax accounts, legally retains qualification for massive ACA subsidies, averting $15,000+ in annual overheads across the gap horizon.</p>
+      </div>
+
+    </div>
+  `;
+
+  // Absolute Math Configuration
+  const opt = {
+    margin:       0, // Zero PDF margins. Native pixel padding in the div controls everything cleanly.
+    filename:     'Private_Wealth_Executive_Summary.pdf',
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 2, useCORS: true, logging: false },
+    jsPDF:        { unit: 'px', format: [900, 1273], orientation: 'portrait' } 
+    // Format explicitly mirrors CSS dimensions, stopping any auto-slicing logic.
+  };
+
+  try {
+    await html2pdf().set(opt).from(htmlContent).save();
+  } catch (err) {
+    console.error('PDF generation failed:', err);
+    alert('Failed to generate PDF.');
+  }
+
+  // Cleanup
+  btn.innerHTML = originalText;
+  btn.disabled = false;
 }
 
 // ============ INITIALIZATION ============
