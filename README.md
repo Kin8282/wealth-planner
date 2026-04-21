@@ -58,6 +58,37 @@ Compare 6 tax-efficient strategies side-by-side with pros, cons, and multi-dimen
 - 529 growth vs. projected college cost chart (with 5% inflation)
 - 6 education planning tips (Superfunding, Roth rollover, state deductions)
 
+### 🦄 Equity & Founders
+- Compare **ISOs vs NSOs** exercise and hold tax implications
+- Alternative Minimum Tax (**AMT**) crossover visualization
+- **Section 1202 QSBS** tax exclusion modeling (0% tax up to $10M/10x)
+- Tax breakdown chart (Ordinary vs AMT vs LTCG vs Net)
+- Dynamic scenario line chart mapping net proceeds across a $10 to $100+ exit spectrum
+- 8 equity tips (83(b), QSBS stacking, 10b5-1 plans, AMT credits)
+
+### 🏘️ 1031 Like-Kind Exchange
+- Model tax-deferred real estate exchanges vs. selling outright
+- Configurable **cap rate**, **appreciation**, **leverage (LTV)**, and **mortgage rate**
+- **Straight-line** vs. **cost segregation** depreciation comparison
+- Wealth comparison chart: 1031 Exchange total wealth vs. Sell & Reinvest vs. Hold
+- Cumulative rental income + depreciation tax savings visualization
+- 8 strategy tips (45/180 day rules, DST, reverse 1031, boot, step-up at death)
+
+### 📐 AQR / Systematic Strategy Comparison
+- Compare **Traditional 60/40**, **Risk Parity**, **Managed Futures**, and **Multi-Factor**
+- Adjustable **risk tolerance**, **leverage factor**, and **inflation** assumptions
+- Factor exposure radar chart (Value, Momentum, Quality, Carry, Defensive, Trend)
+- Risk-adjusted metrics table (Sharpe ratio, max drawdown, S&P correlation)
+- 8 systematic investing tips (crisis alpha, rebalancing premium, carry)
+
+### 🛡️ Insurance Options
+- Compare **PPLI**, **Whole Life**, and **IUL** policies vs. taxable investing
+- Configurable **annual premium**, **payment period**, **age**, and **death benefit**
+- Cash value accumulation chart showing all products + taxable account baseline
+- Death benefit & estate impact comparison at age 75
+- Tax-free retirement income projection via policy loans (age 65–90)
+- 8 insurance tips (ILIT, premium financing, 1035 exchange, split-dollar)
+
 ### 🎯 Master Playbook
 - Recommended hybrid allocation (50% Exchange / 30% CRT / 20% OZ+Collar)
 - 8 emerging investment strategies (PPLI, GRAT, CLT, QSBS, Muni Bonds, etc.)
@@ -86,7 +117,7 @@ python3 -m http.server 8090
 
 ```
 wealth-planner/
-├── index.html    # Main HTML structure (8 tab panels)
+├── index.html    # Main HTML structure (14 tab panels)
 ├── styles.css    # Complete CSS design system (dark luxury theme)
 ├── app.js        # Application logic, calculations, Chart.js rendering
 └── README.md

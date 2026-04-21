@@ -24,6 +24,10 @@ let incomeChart, breakevenChart, cumulativeIncomeChart;
 let relocationChart;
 let estateChart, transferChart;
 let retireDrawdownChart, retireIncomeChart;
+let exchange1031Chart, exchange1031IncomeChart;
+let aqrComparisonChart, aqrFactorChart;
+let insuranceCashValueChart, insuranceComparisonChart, insuranceIncomeChart;
+let equityTaxChart, equityScenarioChart;
 
 // ============ STRATEGIES ============
 function buildStrategies(stockValue, costBasis, capGainsRate) {
@@ -381,6 +385,10 @@ function rebuildCurrentTab(tab) {
     case 'education': renderEducation(); break;
     case 'estate': renderEstate(); break;
     case 'retirement': renderRetirement(); break;
+    case 'equity': renderEquity(); break;
+    case '1031exchange': render1031Exchange(); break;
+    case 'aqr': renderAQR(); break;
+    case 'insurance': renderInsurance(); break;
     case 'playbook': renderPlaybook(); break;
   }
 }
@@ -1862,6 +1870,54 @@ function initInputListeners() {
       }, 100);
     });
   }
+
+  // 1031 Exchange inputs
+  const exchange1031Inputs = ['exchangePropertyValue', 'exchangeCostBasis', 'exchangeTargetValue', 'exchangeCapRate', 'exchangeHoldPeriod', 'exchangeAppreciation', 'exchangeDepreciation', 'exchangeLeverage', 'exchangeMortgageRate'];
+  exchange1031Inputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', debounce(() => {
+        const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+        if (activeTab === '1031exchange') render1031Exchange();
+      }, 300));
+    }
+  });
+
+  // Equity inputs
+  const equityInputs = ['eqOptionType', 'eqShares', 'eqStrike', 'eqCurrentFmv', 'eqExitPrice', 'eqQsbs', 'eqOrdinaryRate', 'eqAmtRate'];
+  equityInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', debounce(() => {
+        const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+        if (activeTab === 'equity') renderEquity();
+      }, 300));
+    }
+  });
+
+  // AQR inputs
+  const aqrInputs = ['aqrPortfolioSize', 'aqrHorizon', 'aqrRiskTolerance', 'aqrLeverage', 'aqrInflation', 'aqrRebalance'];
+  aqrInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', debounce(() => {
+        const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+        if (activeTab === 'aqr') renderAQR();
+      }, 300));
+    }
+  });
+
+  // Insurance inputs
+  const insuranceInputs = ['insurancePremium', 'insurancePremiumYears', 'insuranceAge', 'insuranceCoverage', 'insuranceTaxBracket', 'insuranceAltReturn'];
+  insuranceInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', debounce(() => {
+        const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+        if (activeTab === 'insurance') renderInsurance();
+      }, 300));
+    }
+  });
 }
 
 function debounce(fn, delay) {
@@ -2230,6 +2286,1064 @@ function renderRetirement() {
   const tipsContainer = document.getElementById('retire-tips');
   if (tipsContainer) {
     tipsContainer.innerHTML = retireTips.map(tip => `
+      <div class="edu-tip-card">
+        <div class="edu-tip-header">
+          <span class="edu-tip-title">${tip.title}</span>
+          <span class="edu-tip-tag">${tip.tag}</span>
+        </div>
+        <p class="edu-tip-desc">${tip.desc}</p>
+      </div>
+    `).join('');
+  }
+}
+
+// ============ EQUITY COMPENSATION & FOUNDERS TAB ============
+const equityTips = [
+  {
+    title: 'ISOs vs NSOs',
+    desc: 'NSOs trigger ordinary income tax on exercise immediately. ISOs do not trigger ordinary income, but they do trigger the Alternative Minimum Tax (AMT). Holding ISO shares for 1 year after exercise (and 2 years after grant) turns all growth into long-term capital gains.',
+    tag: 'Basics',
+  },
+  {
+    title: 'The AMT Trap (ISOs)',
+    desc: 'When you exercise ISOs, the difference between the FMV and the Strike Price is a "preference item" for AMT. If the FMV drops heavily after you exercise, you might still owe massive AMT on money you never realized. Always calculate AMT before exercising.',
+    tag: 'Warning',
+  },
+  {
+    title: 'Section 1202: QSBS',
+    desc: 'Qualified Small Business Stock allows founders and early employees of C-corps (under $50M gross assets at issuance) to exclude 100% of federal capital gains up to $10M, or 10x the cost basis (whichever is greater). Must hold for 5 years.',
+    tag: 'Holy Grail',
+  },
+  {
+    title: 'QSBS Stacking / Multiplier',
+    desc: 'If your exit will exceed the $10M QSBS limit, you can "stack" or multiply the exemption by gifting shares to non-grantor trusts for your children BEFORE signing a term sheet. Each trust gets its own $10M exclusion cap.',
+    tag: 'Advanced',
+  },
+  {
+    title: 'Section 83(b) Election',
+    desc: 'When granted early-stage stock subject to vesting, file an 83(b) election within 30 days. You pay tax on the (usually tiny) current value upfront, turning all future appreciation into capital gains and starting the 5-year QSBS clock immediately.',
+    tag: 'Critical Deadline',
+  },
+  {
+    title: 'AMT Credits',
+    desc: 'The AMT you pay on ISO exercises isn\'t lost forever — it generates an AMT credit. You can apply this credit in future years when your regular tax liability is higher than your AMT calculation, eventually recovering the upfront cash.',
+    tag: 'Tax Strategy',
+  },
+  {
+    title: '10b5-1 Trading Plans',
+    desc: 'For executives of public companies: setting up a programmatic 10b5-1 plan protects you from insider trading allegations by scheduling your stock sales months in advance during open open windows.',
+    tag: 'Compliance',
+  },
+  {
+    title: 'Early Exercise (ISOs/NSOs)',
+    desc: 'If your company allows it, exercising before the options vest (when the FMV equals the strike price) means zero tax due at exercise. You just file an 83(b) election and start the long-term capital gains clock.',
+    tag: 'Tax Optimization',
+  },
+];
+
+function renderEquity() {
+  const opType = document.getElementById('eqOptionType')?.value || 'iso';
+  const shares = parseInt(document.getElementById('eqShares')?.value) || 100000;
+  const strike = parseFloat(document.getElementById('eqStrike')?.value) || 1.50;
+  const fmv = parseFloat(document.getElementById('eqCurrentFmv')?.value) || 15.00;
+  const exitPrice = parseFloat(document.getElementById('eqExitPrice')?.value) || 50.00;
+  const isQsbs = document.getElementById('eqQsbs')?.value === 'yes';
+  const ordRate = (parseFloat(document.getElementById('eqOrdinaryRate')?.value) || 37) / 100;
+  const amtRate = (parseFloat(document.getElementById('eqAmtRate')?.value) || 28) / 100;
+  const ltcgRate = 0.20; // assumed max federal LTCG
+
+  const totalCost = shares * strike;
+  const exitValue = shares * exitPrice;
+  const totalGain = exitValue - totalCost;
+  
+  if (totalGain <= 0) {
+    // Underwater - bail out gracefully
+    const resultsContainer = document.getElementById('equity-results');
+    if (resultsContainer) {
+      resultsContainer.innerHTML = `<p style="color:var(--accent-red)">Options are underwater at the projected exit price. Gross value is less than exercise cost.</p>`;
+    }
+    return;
+  }
+
+  let taxOrdinary = 0;
+  let taxAmt = 0;
+  let taxLtcg = 0;
+  let taxQsbsSaved = 0;
+
+  if (opType === 'nso') {
+    // NSOs: Spread at exercise is ordinary income
+    const spreadAtExercise = shares * (Math.min(fmv, exitPrice) - strike);
+    if (spreadAtExercise > 0) taxOrdinary = spreadAtExercise * ordRate;
+    
+    // Growth from FMV to Exit is LTCG (assuming held for > 1 year)
+    let postExerciseGain = 0;
+    if (exitPrice > fmv) {
+      postExerciseGain = shares * (exitPrice - fmv);
+      if (isQsbs) {
+        let maxQsbs = Math.max(10_000_000, 10 * totalCost);
+        let eligibleGain = Math.min(postExerciseGain, maxQsbs);
+        let excessGain = Math.max(0, postExerciseGain - maxQsbs);
+        taxLtcg = excessGain * ltcgRate;
+        taxQsbsSaved = eligibleGain * ltcgRate;
+      } else {
+        taxLtcg = postExerciseGain * ltcgRate;
+      }
+    }
+  } else {
+    // ISOs: Spread at exercise triggers AMT
+    const bargainElement = shares * (Math.min(fmv, exitPrice) - strike);
+    if (bargainElement > 0) taxAmt = bargainElement * amtRate;
+
+    // Assuming a qualifying disposition (held 1 yr after exercise, 2 yr after grant)
+    // Entire gain (Exit - Strike) is subject to LTCG, but you get AMT credit back eventually
+    if (isQsbs) {
+      let maxQsbs = Math.max(10_000_000, 10 * totalCost);
+      let eligibleGain = Math.min(totalGain, maxQsbs);
+      let excessGain = Math.max(0, totalGain - maxQsbs);
+      taxLtcg = excessGain * ltcgRate;
+      taxQsbsSaved = eligibleGain * ltcgRate;
+    } else {
+      taxLtcg = totalGain * ltcgRate;
+      // In QSBS non-qualifying, ISOs trigger AMT up front, but at exit you pay LTCG.
+      // Usually, you don't pay BOTH if AMT credit is recovered. We'll simplify to just LTCG being the dominant final tax.
+      // But we report AMT to show the cash requirement at exercise.
+      taxAmt = Math.max(0, taxAmt - taxLtcg); 
+    }
+  }
+
+  const totalTax = taxOrdinary + taxAmt + taxLtcg;
+  const netProceeds = exitValue - totalCost - totalTax;
+  const effectiveRate = totalGain > 0 ? (totalTax / totalGain) : 0;
+
+  // Result cards
+  const resultsContainer = document.getElementById('equity-results');
+  if (resultsContainer) {
+    const qsbsMsg = isQsbs && taxQsbsSaved > 0 ? `Saved ${fmtFull(taxQsbsSaved)} via Sec 1202` : (isQsbs ? `Under limit` : `Not applicable`);
+    const amtMsg = opType === 'iso' ? `Requires ${fmtFull(taxAmt)} cash at exercise` : `None for NSOs`;
+
+    const cards = [
+      { label: 'Gross Exit Value', value: fmtFull(exitValue), note: `${shares.toLocaleString()} shares @ $${exitPrice}`, color: '#94a3b8' },
+      { label: 'Net After-Tax Proceeds', value: fmtFull(netProceeds), note: `After $${fmtFull(totalCost)} cost basis`, color: '#10b981' },
+      { label: 'Effective Tax Rate', value: (effectiveRate * 100).toFixed(1) + '%', note: `Total Tax: ${fmtFull(totalTax)}`, color: '#ef4444' },
+      { label: 'Total Ordinary Tax', value: fmtFull(taxOrdinary), note: `At ${(ordRate * 100).toFixed(1)}% rate`, color: '#f59e0b' },
+      { label: 'Total Cap Gains (LTCG)', value: fmtFull(taxLtcg), note: `At ${(ltcgRate * 100).toFixed(1)}% rate`, color: '#8b5cf6' },
+      { label: 'QSBS Tax Savings', value: isQsbs ? fmtFull(taxQsbsSaved) : '$0', note: qsbsMsg, color: isQsbs ? '#10b981' : '#64748b' },
+    ];
+
+    resultsContainer.innerHTML = cards.map((c, i) => `
+      <div class="edu-result-card animate-in stagger-${i + 1}">
+        <div class="edu-result-label">${c.label}</div>
+        <div class="edu-result-value" style="color: ${c.color}">${c.value}</div>
+        <div class="edu-result-note">${c.note}</div>
+      </div>
+    `).join('');
+  }
+
+  // Bar Chart: Tax Breakdown
+  const taxCtx = document.getElementById('equityTaxChart');
+  if (taxCtx && exitValue > totalCost) {
+    if (equityTaxChart) equityTaxChart.destroy();
+    
+    // Determine the chunks that make up the Gross Exit Value
+    const chunks = [
+      { label: 'Cost Basis', val: totalCost, color: '#475569' },
+      { label: 'Net Profit', val: netProceeds, color: '#10b981' },
+      { label: 'Ordinary Income Tax', val: taxOrdinary, color: '#f59e0b' },
+      { label: 'Long-Term Cap Gains', val: taxLtcg, color: '#8b5cf6' },
+      { label: 'AMT (Unrecovered)', val: taxAmt, color: '#ef4444' }
+    ].filter(c => c.val > 0);
+
+    // Calculate QSBS saved space purely for visualization
+    const visualQsbs = taxQsbsSaved;
+
+    equityTaxChart = new Chart(taxCtx, {
+      type: 'bar',
+      data: {
+        labels: ['Exit Capital Breakdown'],
+        datasets: chunks.map(c => ({
+          label: c.label,
+          data: [c.val],
+          backgroundColor: c.color,
+          borderWidth: 0,
+        })).concat(visualQsbs > 0 ? [{
+          label: 'QSBS Tax Saved (Virtual)',
+          data: [visualQsbs],
+          backgroundColor: 'rgba(16, 185, 129, 0.15)',
+          borderColor: '#10b981',
+          borderWidth: 2,
+          borderDash: [5, 5]
+        }] : [])
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        indexAxis: 'y', // horizontal bar
+        scales: {
+          x: { stacked: true, grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1000000).toFixed(1) + 'M' } },
+          y: { stacked: true, grid: { display: false }, ticks: { display: false } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 12 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtFull(ctx.parsed.x)}` } },
+        },
+      },
+    });
+  }
+
+  // Line Chart: Scenario modeling (Exit Price from $1 to 3x projected)
+  const scCtx = document.getElementById('equityScenarioChart');
+  if (scCtx) {
+    if (equityScenarioChart) equityScenarioChart.destroy();
+    
+    // Build scenarios 
+    const step = Math.max(1, Math.round(exitPrice * 0.2));
+    const maxSimulation = exitPrice * 2.5;
+    const simPrices = [];
+    for(let p = Math.max(strike, 1); p <= maxSimulation; p += step) {
+      simPrices.push(p);
+    }
+    
+    const scNet = [];
+    const scGross = [];
+    const scAmt = [];
+
+    simPrices.forEach(p => {
+      const g = shares * p;
+      const tc = shares * strike;
+      const gGain = g - tc;
+      
+      let tOrd = 0;
+      let tAmt = 0;
+      let tLtcg = 0;
+
+      if (opType === 'nso') {
+        const spread = shares * (Math.min(fmv, p) - strike);
+        if (spread > 0) tOrd = spread * ordRate;
+        if (p > fmv) {
+          const postGain = shares * (p - fmv);
+          if (isQsbs) {
+            let maxQ = Math.max(10_000_000, 10 * tc);
+            tLtcg = Math.max(0, postGain - maxQ) * ltcgRate;
+          } else {
+            tLtcg = postGain * ltcgRate;
+          }
+        }
+      } else {
+        const bargain = shares * (Math.min(fmv, p) - strike);
+        if (bargain > 0) tAmt = bargain * amtRate;
+        if (isQsbs) {
+          let maxQ = Math.max(10_000_000, 10 * tc);
+          tLtcg = Math.max(0, gGain - maxQ) * ltcgRate;
+        } else {
+          tLtcg = gGain * ltcgRate;
+          tAmt = Math.max(0, tAmt - tLtcg);
+        }
+      }
+
+      scGross.push(g);
+      scNet.push(g - tc - tOrd - tAmt - tLtcg);
+      scAmt.push(tAmt);
+    });
+
+    equityScenarioChart = new Chart(scCtx, {
+      type: 'line',
+      data: {
+        labels: simPrices.map(p => '$' + p.toFixed(0)),
+        datasets: [
+          { label: 'Net After-Tax Proceeds', data: scNet, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, borderWidth: 2.5, tension: 0.3, pointRadius: 0 },
+          { label: 'Gross Exit Value', data: scGross, borderColor: '#64748b', fill: false, borderWidth: 1.5, borderDash: [5, 3], tension: 0.3, pointRadius: 0 },
+          { label: 'AMT Liability (ISOs)', data: scAmt, borderColor: '#ef4444', fill: false, borderWidth: 2, tension: 0.3, pointRadius: 0, hidden: opType !== 'iso' },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { title: { display: true, text: 'Exit Price per Share', color: '#64748b' }, grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 } } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtFull(ctx.parsed.y)}` } },
+        },
+      },
+    });
+  }
+
+  // Tips
+  const tipsContainer = document.getElementById('equity-tips');
+  if (tipsContainer) {
+    tipsContainer.innerHTML = equityTips.map(tip => `
+      <div class="edu-tip-card">
+        <div class="edu-tip-header">
+          <span class="edu-tip-title">${tip.title}</span>
+          <span class="edu-tip-tag">${tip.tag}</span>
+        </div>
+        <p class="edu-tip-desc">${tip.desc}</p>
+      </div>
+    `).join('');
+  }
+}
+
+// ============ 1031 LIKE-KIND EXCHANGE TAB ============
+const exchange1031Tips = [
+  {
+    title: '45-Day Identification Rule',
+    desc: 'You must identify up to 3 replacement properties within 45 calendar days of selling the relinquished property. Miss this deadline and the entire exchange fails — no extensions.',
+    tag: 'Critical Deadline',
+  },
+  {
+    title: '180-Day Closing Deadline',
+    desc: 'The replacement property must be acquired within 180 days of selling the original property (or your tax return due date, whichever is earlier). Use a Qualified Intermediary (QI) to hold funds.',
+    tag: 'Critical Deadline',
+  },
+  {
+    title: 'Delaware Statutory Trust (DST)',
+    desc: 'Can\'t find a replacement property? A DST allows you to exchange into a fractional interest in institutional-quality real estate (apartments, warehouses, medical offices) with zero management responsibilities.',
+    tag: 'Passive 1031',
+  },
+  {
+    title: 'Reverse 1031 Exchange',
+    desc: 'Buy the replacement property BEFORE selling the old one. More complex and expensive ($10K-$20K extra fees) but eliminates the scramble to find a property within 45 days.',
+    tag: 'Advanced',
+  },
+  {
+    title: 'Boot & Partial Exchanges',
+    desc: '"Boot" is any non-like-kind property received (cash, debt relief). Boot IS taxable. To fully defer, the replacement must be equal or greater in value AND debt. Trading down triggers tax on the difference.',
+    tag: 'Tax Rule',
+  },
+  {
+    title: 'Cost Segregation Bonus',
+    desc: 'After the 1031 exchange, perform a cost segregation study on the new property. Reclassify 20-40% of the building value to 5/7/15-year property classes for accelerated depreciation — massive year-one tax savings.',
+    tag: 'Tax Strategy',
+  },
+  {
+    title: 'Step-Up at Death',
+    desc: 'The ultimate 1031 endgame: keep exchanging throughout your lifetime, then heirs receive a full step-up in basis at death. All deferred capital gains are permanently eliminated. Tax-free.',
+    tag: 'Estate Play',
+  },
+  {
+    title: 'Drop & Swap for Partnerships',
+    desc: 'If you own property in a partnership, you can\'t 1031 exchange the partnership interest. Instead, "drop" the property to partners as tenants-in-common, THEN each partner does their own 1031 exchange.',
+    tag: 'Partnership',
+  },
+];
+
+function render1031Exchange() {
+  const propertyValue = parseFloat(document.getElementById('exchangePropertyValue')?.value) || 1_000_000;
+  const costBasis = parseFloat(document.getElementById('exchangeCostBasis')?.value) || 300_000;
+  const targetValue = parseFloat(document.getElementById('exchangeTargetValue')?.value) || 1_200_000;
+  const capRate = (parseFloat(document.getElementById('exchangeCapRate')?.value) || 6) / 100;
+  const holdPeriod = parseInt(document.getElementById('exchangeHoldPeriod')?.value) || 20;
+  const appreciation = (parseFloat(document.getElementById('exchangeAppreciation')?.value) || 3) / 100;
+  const depMethod = document.getElementById('exchangeDepreciation')?.value || 'straight';
+  const ltv = (parseFloat(document.getElementById('exchangeLeverage')?.value) || 60) / 100;
+  const mortgageRate = (parseFloat(document.getElementById('exchangeMortgageRate')?.value) || 6.5) / 100;
+
+  const gain = Math.max(0, propertyValue - costBasis);
+  const { capGainsRate } = getInputs();
+  const taxIfSold = Math.round(gain * capGainsRate);
+  const afterTaxProceeds = propertyValue - taxIfSold;
+
+  // 1031 Exchange scenario — into replacement property
+  const loanAmount = targetValue * ltv;
+  const equityIn = targetValue - loanAmount;
+  const annualDebtService = loanAmount * mortgageRate; // simplified interest-only
+  const buildingValue = targetValue * 0.80; // 80% building, 20% land
+
+  // Depreciation calculation
+  let annualDepreciation;
+  let firstYearBonus = 0;
+  if (depMethod === 'costseg') {
+    // Cost seg: 20% to 5yr, 10% to 7yr, 10% to 15yr, 40% straight-line
+    const fiveYr = buildingValue * 0.20 / 5;
+    const sevenYr = buildingValue * 0.10 / 7;
+    const fifteenYr = buildingValue * 0.10 / 15;
+    const remaining = buildingValue * 0.40 / 27.5;
+    annualDepreciation = Math.round(fiveYr + sevenYr + fifteenYr + remaining);
+    firstYearBonus = Math.round(buildingValue * 0.30 * 0.60); // 60% bonus depreciation on accelerated portion
+  } else {
+    annualDepreciation = Math.round(buildingValue / 27.5);
+  }
+
+  const { taxBracket } = getInputs();
+  const annualTaxSavings = Math.round(annualDepreciation * taxBracket);
+  const firstYearTaxSavings = annualTaxSavings + Math.round(firstYearBonus * taxBracket);
+
+  // Project both scenarios over time
+  const years = Array.from({ length: holdPeriod + 1 }, (_, i) => i);
+
+  // 1031 Exchange path
+  const exchange1031Data = years.map(yr => {
+    const propVal = targetValue * Math.pow(1 + appreciation, yr);
+    const remainingDebt = loanAmount; // simplified interest-only
+    const equity = propVal - remainingDebt;
+    const cumRental = yr > 0 ? Array.from({ length: yr }, (__, y) => {
+      const netIncome = targetValue * Math.pow(1 + appreciation, y) * capRate - annualDebtService;
+      return Math.max(0, netIncome);
+    }).reduce((a, b) => a + b, 0) : 0;
+    const cumDepTax = yr === 0 ? 0 : firstYearTaxSavings + annualTaxSavings * Math.max(0, yr - 1);
+    return {
+      year: yr,
+      equity: Math.round(equity),
+      netIncome: Math.round(yr > 0 ? targetValue * Math.pow(1 + appreciation, yr) * capRate - annualDebtService : 0),
+      cumRental: Math.round(cumRental),
+      cumDepTax: Math.round(cumDepTax),
+      totalWealth: Math.round(equity + cumRental + cumDepTax),
+    };
+  });
+
+  // Sell & reinvest path (invest after-tax proceeds at market returns)
+  const { annualReturn } = getInputs();
+  const sellData = years.map(yr => {
+    const invested = afterTaxProceeds * Math.pow(1 + annualReturn, yr);
+    const dividends = yr > 0 ? Array.from({ length: yr }, (__, y) =>
+      afterTaxProceeds * Math.pow(1 + annualReturn, y) * 0.02
+    ).reduce((a, b) => a + b, 0) : 0;
+    return {
+      year: yr,
+      totalWealth: Math.round(invested + dividends),
+    };
+  });
+
+  // Hold as-is (do nothing)
+  const holdData = years.map(yr => ({
+    year: yr,
+    totalWealth: Math.round(propertyValue * Math.pow(1 + appreciation, yr)),
+  }));
+
+  // Result cards
+  const resultsContainer = document.getElementById('exchange1031-results');
+  if (resultsContainer) {
+    const totalRentalIncome = exchange1031Data[holdPeriod].cumRental;
+    const totalDepBenefit = exchange1031Data[holdPeriod].cumDepTax;
+    const exchangeEndWealth = exchange1031Data[holdPeriod].totalWealth;
+    const sellEndWealth = sellData[holdPeriod].totalWealth;
+
+    const cards = [
+      { label: 'Tax Deferred via 1031', value: fmtFull(taxIfSold), note: `${(capGainsRate * 100).toFixed(1)}% on ${fmtFull(gain)} gain`, color: '#10b981' },
+      { label: `1031 Equity at Year ${holdPeriod}`, value: fmt(exchange1031Data[holdPeriod].equity), note: `${fmtFull(targetValue)} @ ${(appreciation * 100).toFixed(1)}%/yr`, color: '#6366f1' },
+      { label: 'Total Rental Income', value: fmt(totalRentalIncome), note: `${(capRate * 100).toFixed(1)}% cap rate, ${holdPeriod} years`, color: '#f59e0b' },
+      { label: 'Depreciation Tax Savings', value: fmt(totalDepBenefit), note: depMethod === 'costseg' ? 'Cost segregation (accelerated)' : 'Straight-line 27.5yr', color: '#8b5cf6' },
+      { label: '1031 Total Wealth', value: fmt(exchangeEndWealth), note: 'Equity + rental income + tax savings', color: '#10b981' },
+      { label: '1031 Advantage vs Selling', value: (exchangeEndWealth > sellEndWealth ? '+' : '') + fmt(exchangeEndWealth - sellEndWealth), note: `Compared to sell & reinvest at ${(annualReturn * 100).toFixed(0)}%`, color: exchangeEndWealth > sellEndWealth ? '#10b981' : '#ef4444' },
+    ];
+
+    resultsContainer.innerHTML = cards.map((c, i) => `
+      <div class="edu-result-card animate-in stagger-${i + 1}">
+        <div class="edu-result-label">${c.label}</div>
+        <div class="edu-result-value" style="color: ${c.color}">${c.value}</div>
+        <div class="edu-result-note">${c.note}</div>
+      </div>
+    `).join('');
+  }
+
+  // Wealth comparison chart
+  const exCtx = document.getElementById('exchange1031Chart');
+  if (exCtx) {
+    if (exchange1031Chart) exchange1031Chart.destroy();
+    exchange1031Chart = new Chart(exCtx, {
+      type: 'line',
+      data: {
+        labels: years.map(yr => 'Yr ' + yr),
+        datasets: [
+          { label: '1031 Exchange (Total Wealth)', data: exchange1031Data.map(d => d.totalWealth), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, borderWidth: 2.5, tension: 0.3, pointRadius: 0 },
+          { label: 'Sell & Reinvest (Stock Market)', data: sellData.map(d => d.totalWealth), borderColor: '#ef4444', fill: false, borderWidth: 2, tension: 0.3, pointRadius: 0 },
+          { label: 'Hold Current Property', data: holdData.map(d => d.totalWealth), borderColor: '#64748b', fill: false, borderWidth: 1.5, tension: 0.3, borderDash: [5, 3], pointRadius: 0 },
+          { label: '1031 Equity Only', data: exchange1031Data.map(d => d.equity), borderColor: '#6366f1', fill: false, borderWidth: 2, tension: 0.3, borderDash: [3, 3], pointRadius: 0 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+        },
+      },
+    });
+  }
+
+  // Cumulative cash flow chart
+  const incCtx = document.getElementById('exchange1031IncomeChart');
+  if (incCtx) {
+    if (exchange1031IncomeChart) exchange1031IncomeChart.destroy();
+    exchange1031IncomeChart = new Chart(incCtx, {
+      type: 'bar',
+      data: {
+        labels: years.map(yr => 'Yr ' + yr),
+        datasets: [
+          { label: 'Cumulative Rental Income', data: exchange1031Data.map(d => d.cumRental), backgroundColor: 'rgba(245,158,11,0.5)', borderColor: '#f59e0b', borderWidth: 1, borderRadius: 3 },
+          { label: 'Cumulative Tax Savings', data: exchange1031Data.map(d => d.cumDepTax), backgroundColor: 'rgba(139,92,246,0.5)', borderColor: '#8b5cf6', borderWidth: 1, borderRadius: 3 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { stacked: true, grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1000).toFixed(0) + 'K' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtFull(ctx.parsed.y)}` } },
+        },
+      },
+    });
+  }
+
+  // Tips
+  const tipsContainer = document.getElementById('exchange1031-tips');
+  if (tipsContainer) {
+    tipsContainer.innerHTML = exchange1031Tips.map(tip => `
+      <div class="edu-tip-card">
+        <div class="edu-tip-header">
+          <span class="edu-tip-title">${tip.title}</span>
+          <span class="edu-tip-tag">${tip.tag}</span>
+        </div>
+        <p class="edu-tip-desc">${tip.desc}</p>
+      </div>
+    `).join('');
+  }
+}
+
+// ============ AQR / SYSTEMATIC STRATEGY TAB ============
+const aqrTips = [
+  {
+    title: 'Risk Parity Explained',
+    desc: 'Instead of allocating 60/40 by capital, Risk Parity allocates by risk contribution. Bonds get levered up so each asset class contributes equal volatility. Result: better Sharpe ratios and smaller drawdowns in most environments.',
+    tag: 'Core Concept',
+  },
+  {
+    title: 'Managed Futures as Crisis Alpha',
+    desc: 'Trend-following strategies have historically delivered positive returns during equity market crashes (2008, 2020, 2022). They\'re the only major strategy with negative correlation to equities during crises — true portfolio insurance.',
+    tag: 'Crisis Alpha',
+  },
+  {
+    title: 'Factor Premiums (Value, Momentum, Quality)',
+    desc: 'Academic research shows persistent premiums for Value (~3%), Momentum (~7%), and Quality (~4%) across asset classes and geographies over 100+ years. AQR\'s multi-factor approach harvests all three simultaneously.',
+    tag: 'Research',
+  },
+  {
+    title: 'Rebalancing Premium',
+    desc: 'Systematic rebalancing (quarterly or monthly) forces "buy low, sell high" discipline. Studies show rebalancing adds 0.5-1.0% annually vs. buy-and-hold. This is free alpha from discipline alone.',
+    tag: 'Execution',
+  },
+  {
+    title: 'Leverage & Risk Management',
+    desc: 'Risk Parity typically uses 1.5-2x leverage on bonds to equalize risk. This is modest leverage on the safest asset class. The key risk is a simultaneous stocks + bonds drawdown (rare but happened in 2022).',
+    tag: 'Leverage',
+  },
+  {
+    title: 'Tax Efficiency of Systematic Strategies',
+    desc: 'Factor strategies can be implemented tax-efficiently: long-only versions avoid short-term gains, and tax-loss harvesting is built into the rebalancing process. Managed futures in offshore structures avoid tax complications.',
+    tag: 'Tax',
+  },
+  {
+    title: 'Carry: The Hidden Factor',
+    desc: 'Carry strategies earn returns from yield differentials: high-yield bonds, steep yield curves, currencies with high interest rates. AQR research shows carry is a distinct, diversifying source of return across all asset classes.',
+    tag: 'Advanced',
+  },
+  {
+    title: 'Who Should Use Systematic Strategies?',
+    desc: 'Best for investors with $500K+ portfolios, 10+ year horizons, and comfort with complexity. These strategies underperform in straight bull markets but excel in providing consistent risk-adjusted returns across all environments.',
+    tag: 'Suitability',
+  },
+];
+
+// Strategy profiles based on AQR published research
+const AQR_STRATEGIES = {
+  traditional: {
+    name: 'Traditional 60/40',
+    color: '#64748b',
+    icon: '📊',
+    baseReturn: 0.07,
+    baseVol: 0.10,
+    sharpe: 0.45,
+    maxDrawdown: -0.35,
+    spCorrelation: 0.85,
+    factors: { value: 3, momentum: 2, quality: 3, carry: 4, defensive: 5, trend: 1 },
+  },
+  riskParity: {
+    name: 'Risk Parity',
+    color: '#6366f1',
+    icon: '⚖️',
+    baseReturn: 0.075,
+    baseVol: 0.08,
+    sharpe: 0.65,
+    maxDrawdown: -0.20,
+    spCorrelation: 0.55,
+    factors: { value: 4, momentum: 3, quality: 5, carry: 7, defensive: 9, trend: 3 },
+  },
+  managedFutures: {
+    name: 'Managed Futures',
+    color: '#f59e0b',
+    icon: '📈',
+    baseReturn: 0.06,
+    baseVol: 0.12,
+    sharpe: 0.50,
+    maxDrawdown: -0.15,
+    spCorrelation: -0.10,
+    factors: { value: 2, momentum: 8, quality: 2, carry: 5, defensive: 4, trend: 10 },
+  },
+  multiFactor: {
+    name: 'Multi-Factor',
+    color: '#10b981',
+    icon: '🧬',
+    baseReturn: 0.09,
+    baseVol: 0.14,
+    sharpe: 0.55,
+    maxDrawdown: -0.30,
+    spCorrelation: 0.70,
+    factors: { value: 9, momentum: 8, quality: 8, carry: 6, defensive: 5, trend: 4 },
+  },
+};
+
+function renderAQR() {
+  const portfolioSize = parseFloat(document.getElementById('aqrPortfolioSize')?.value) || 1_000_000;
+  const horizon = parseInt(document.getElementById('aqrHorizon')?.value) || 20;
+  const riskTolerance = document.getElementById('aqrRiskTolerance')?.value || 'moderate';
+  const leverage = parseFloat(document.getElementById('aqrLeverage')?.value) || 1.0;
+  const inflation = (parseFloat(document.getElementById('aqrInflation')?.value) || 2.5) / 100;
+
+  // Risk tolerance adjustments
+  const riskMult = riskTolerance === 'conservative' ? 0.7 : riskTolerance === 'aggressive' ? 1.3 : 1.0;
+  const volMult = riskTolerance === 'conservative' ? 0.6 : riskTolerance === 'aggressive' ? 1.4 : 1.0;
+
+  const years = Array.from({ length: horizon + 1 }, (_, i) => i);
+
+  // Build projection data for each strategy
+  const projections = {};
+  Object.entries(AQR_STRATEGIES).forEach(([key, strat]) => {
+    const adjReturn = strat.baseReturn * leverage * riskMult - (leverage > 1 ? (leverage - 1) * 0.04 : 0); // borrowing cost
+    const adjVol = strat.baseVol * leverage * volMult;
+    projections[key] = {
+      ...strat,
+      adjReturn,
+      adjVol,
+      adjSharpe: adjReturn / adjVol,
+      data: years.map(yr => Math.round(portfolioSize * Math.pow(1 + adjReturn, yr))),
+      realData: years.map(yr => Math.round(portfolioSize * Math.pow(1 + adjReturn - inflation, yr))),
+    };
+  });
+
+  // Result cards — best strategy analysis
+  const resultsContainer = document.getElementById('aqr-results');
+  if (resultsContainer) {
+    const bestReturn = Object.entries(projections).sort((a, b) => b[1].adjReturn - a[1].adjReturn)[0];
+    const bestSharpe = Object.entries(projections).sort((a, b) => b[1].adjSharpe - a[1].adjSharpe)[0];
+
+    const cards = [
+      { label: 'Best Expected Return', value: (bestReturn[1].adjReturn * 100).toFixed(1) + '%', note: `${bestReturn[1].name} → ${fmt(bestReturn[1].data[horizon])} at year ${horizon}`, color: bestReturn[1].color },
+      { label: 'Best Risk-Adjusted (Sharpe)', value: bestSharpe[1].adjSharpe.toFixed(2), note: `${bestSharpe[1].name} — highest return per unit of risk`, color: bestSharpe[1].color },
+      { label: 'Lowest Max Drawdown', value: (projections.managedFutures.maxDrawdown * 100).toFixed(0) + '%', note: 'Managed Futures — crisis alpha protection', color: '#f59e0b' },
+      { label: 'Lowest S&P Correlation', value: projections.managedFutures.spCorrelation.toFixed(2), note: 'Managed Futures — true diversifier', color: '#f59e0b' },
+    ];
+
+    resultsContainer.innerHTML = cards.map((c, i) => `
+      <div class="edu-result-card animate-in stagger-${i + 1}">
+        <div class="edu-result-label">${c.label}</div>
+        <div class="edu-result-value" style="color: ${c.color}">${c.value}</div>
+        <div class="edu-result-note">${c.note}</div>
+      </div>
+    `).join('');
+  }
+
+  // Growth comparison chart
+  const compCtx = document.getElementById('aqrComparisonChart');
+  if (compCtx) {
+    if (aqrComparisonChart) aqrComparisonChart.destroy();
+    const datasets = Object.entries(projections).map(([key, p], i) => ({
+      label: p.name,
+      data: p.data,
+      borderColor: p.color,
+      backgroundColor: i === 0 ? 'transparent' : (key === 'riskParity' ? 'rgba(99,102,241,0.08)' : 'transparent'),
+      fill: key === 'riskParity',
+      borderWidth: key === 'riskParity' ? 2.5 : 2,
+      tension: 0.3,
+      pointRadius: 0,
+      borderDash: key === 'managedFutures' ? [5, 3] : [],
+    }));
+
+    aqrComparisonChart = new Chart(compCtx, {
+      type: 'line',
+      data: { labels: years.map(yr => 'Yr ' + yr), datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+        },
+      },
+    });
+  }
+
+  // Factor radar chart
+  const factCtx = document.getElementById('aqrFactorChart');
+  if (factCtx) {
+    if (aqrFactorChart) aqrFactorChart.destroy();
+    const factorLabels = ['Value', 'Momentum', 'Quality', 'Carry', 'Defensive', 'Trend'];
+
+    aqrFactorChart = new Chart(factCtx, {
+      type: 'radar',
+      data: {
+        labels: factorLabels,
+        datasets: Object.entries(AQR_STRATEGIES).map(([key, strat]) => ({
+          label: strat.name,
+          data: factorLabels.map(f => strat.factors[f.toLowerCase()]),
+          borderColor: strat.color,
+          backgroundColor: strat.color + '15',
+          borderWidth: 2,
+          pointBackgroundColor: strat.color,
+          pointRadius: 3,
+        })),
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          r: {
+            beginAtZero: true, max: 10,
+            ticks: { display: false },
+            grid: { color: '#1e293b' },
+            angleLines: { color: '#1e293b' },
+            pointLabels: { color: '#94a3b8', font: { size: 11, family: 'Inter' } },
+          },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, padding: 12, usePointStyle: true } },
+        },
+      },
+    });
+  }
+
+  // Metrics table
+  const table = document.getElementById('aqr-metrics-table');
+  if (table) {
+    const thead = table.querySelector('thead');
+    const tbody = table.querySelector('tbody');
+    thead.innerHTML = `<tr>
+      <th>Metric</th>
+      ${Object.values(projections).map(p => `<th style="color:${p.color}">${p.name}</th>`).join('')}
+    </tr>`;
+
+    const metrics = [
+      { name: 'Expected Return', fn: p => (p.adjReturn * 100).toFixed(1) + '%' },
+      { name: 'Volatility (σ)', fn: p => (p.adjVol * 100).toFixed(1) + '%' },
+      { name: 'Sharpe Ratio', fn: p => p.adjSharpe.toFixed(2) },
+      { name: 'Max Drawdown', fn: p => (p.maxDrawdown * 100).toFixed(0) + '%' },
+      { name: 'S&P 500 Correlation', fn: p => p.spCorrelation.toFixed(2) },
+      { name: `Value at Year ${horizon}`, fn: p => fmt(p.data[horizon]) },
+      { name: `Real Value (Yr ${horizon})`, fn: p => fmt(p.realData[horizon]) },
+    ];
+
+    tbody.innerHTML = metrics.map(m => `
+      <tr>
+        <td>${m.name}</td>
+        ${Object.values(projections).map(p => `<td style="color:${p.color}">${m.fn(p)}</td>`).join('')}
+      </tr>
+    `).join('');
+  }
+
+  // Tips
+  const tipsContainer = document.getElementById('aqr-tips');
+  if (tipsContainer) {
+    tipsContainer.innerHTML = aqrTips.map(tip => `
+      <div class="edu-tip-card">
+        <div class="edu-tip-header">
+          <span class="edu-tip-title">${tip.title}</span>
+          <span class="edu-tip-tag">${tip.tag}</span>
+        </div>
+        <p class="edu-tip-desc">${tip.desc}</p>
+      </div>
+    `).join('');
+  }
+}
+
+// ============ INSURANCE OPTIONS TAB ============
+const insuranceTips = [
+  {
+    title: 'Private Placement Life Insurance (PPLI)',
+    desc: 'Wrap alternative investments (hedge funds, PE, real estate) inside a life insurance policy. All growth is tax-deferred; death benefit is income-tax free. Requires $1M+ premium. Best for ultra-HNW investors seeking tax-free compounding on alternatives.',
+    tag: 'Ultra-HNW',
+  },
+  {
+    title: 'Whole Life as Bond Alternative',
+    desc: 'Top-tier mutual companies (Northwestern, MassMutual, Guardian) pay 5-6% total crediting rates with guarantees. In a rising rate environment, whole life cash value acts like a tax-advantaged bond with no duration risk and zero correlation to equities.',
+    tag: 'Conservative',
+  },
+  {
+    title: 'IUL Cap & Floor Mechanics',
+    desc: 'Indexed Universal Life credits interest linked to the S&P 500 with a 0% floor (no losses) and ~10% cap (limited upside). Over time, the asymmetry produces 6-7% average returns with zero downside risk. Watch for high policy costs in later years.',
+    tag: 'Growth',
+  },
+  {
+    title: 'ILIT for Estate Tax Elimination',
+    desc: 'An Irrevocable Life Insurance Trust (ILIT) owns the policy outside your estate. A $5M death benefit in an ILIT saves $2M+ in estate taxes. Fund with annual gift exclusions ($18K/person). Existing policies can be transferred (3-year lookback applies).',
+    tag: 'Estate',
+  },
+  {
+    title: 'Premium Financing',
+    desc: 'Borrow from a bank to pay insurance premiums, using the policy\'s cash value as collateral. Effective when loan rates < policy crediting rates. Allows massive death benefits with minimal out-of-pocket cost. Requires sophisticated structuring.',
+    tag: 'Advanced',
+  },
+  {
+    title: '1035 Exchange for Existing Policies',
+    desc: 'Like a 1031 for real estate, a 1035 exchange lets you swap an old life insurance or annuity policy for a new one without triggering taxes. Useful for upgrading to a better-performing policy or converting annuities to life insurance.',
+    tag: 'Tax Strategy',
+  },
+  {
+    title: 'Tax-Free Retirement Income',
+    desc: 'After building cash value for 15-20 years, you can take tax-free policy loans against the cash value — essentially creating a tax-free retirement income stream. Unlike Roth IRAs, there are no contribution limits or income phase-outs.',
+    tag: 'Retirement',
+  },
+  {
+    title: 'Split-Dollar Arrangements',
+    desc: 'An employer or family member shares the cost of a life insurance policy. Economic benefit split-dollar arrangements let you transfer wealth to the next generation at a fraction of gift tax cost. Commonly used in family business succession.',
+    tag: 'Business',
+  },
+];
+
+function renderInsurance() {
+  const premium = parseFloat(document.getElementById('insurancePremium')?.value) || 50_000;
+  const premiumYears = parseInt(document.getElementById('insurancePremiumYears')?.value) || 20;
+  const currentAge = parseInt(document.getElementById('insuranceAge')?.value) || 45;
+  const deathBenefit = parseFloat(document.getElementById('insuranceCoverage')?.value) || 5_000_000;
+  const taxBracket = parseFloat(document.getElementById('insuranceTaxBracket')?.value) || 0.37;
+  const altReturn = (parseFloat(document.getElementById('insuranceAltReturn')?.value) || 7) / 100;
+
+  const totalPremiums = premium * premiumYears;
+  const projectionYears = 90 - currentAge; // project to age 90
+  const years = Array.from({ length: projectionYears + 1 }, (_, i) => i);
+
+  // Insurance product models
+  const products = {
+    ppli: {
+      name: 'PPLI',
+      color: '#6366f1',
+      icon: '💎',
+      creditRate: 0.085, // hedge fund/alt returns inside policy
+      costRate: 0.005,   // low insurance costs
+      cashValues: [],
+      deathBenefits: [],
+    },
+    wholeLife: {
+      name: 'Whole Life',
+      color: '#10b981',
+      icon: '🏛️',
+      creditRate: 0.055, // dividends + guaranteed rate
+      costRate: 0.015,   // higher insurance costs
+      cashValues: [],
+      deathBenefits: [],
+    },
+    iul: {
+      name: 'IUL',
+      color: '#f59e0b',
+      icon: '📊',
+      creditRate: 0.065, // index-linked with cap
+      costRate: 0.02,    // COI increases with age
+      cashValues: [],
+      deathBenefits: [],
+    },
+  };
+
+  // Project cash values for each product
+  Object.values(products).forEach(prod => {
+    let cv = 0;
+    for (let yr = 0; yr <= projectionYears; yr++) {
+      if (yr > 0) {
+        const premThisYear = yr <= premiumYears ? premium : 0;
+        const netCredit = prod.creditRate - prod.costRate;
+        // COI increases with age for IUL
+        const ageFactor = prod === products.iul ? Math.max(1, 1 + (currentAge + yr - 60) * 0.002) : 1;
+        const costAdjust = prod.costRate * (ageFactor - 1);
+        cv = (cv + premThisYear) * (1 + netCredit - costAdjust);
+      }
+      prod.cashValues.push(Math.max(0, Math.round(cv)));
+      // Death benefit is max of face amount or cash value * corridor factor
+      const corridorFactor = (currentAge + yr) < 60 ? 2.0 : (currentAge + yr) < 70 ? 1.5 : 1.2;
+      prod.deathBenefits.push(Math.max(deathBenefit, Math.round(cv * corridorFactor)));
+    }
+  });
+
+  // Taxable account comparison (invest same premiums, pay taxes on gains)
+  const taxableValues = [];
+  let taxableCV = 0;
+  for (let yr = 0; yr <= projectionYears; yr++) {
+    if (yr > 0) {
+      const premThisYear = yr <= premiumYears ? premium : 0;
+      const afterTaxReturn = altReturn * (1 - taxBracket * 0.5); // blend of cap gains and ordinary
+      taxableCV = (taxableCV + premThisYear) * (1 + afterTaxReturn);
+    }
+    taxableValues.push(Math.round(taxableCV));
+  }
+
+  // Result cards
+  const resultsContainer = document.getElementById('insurance-results');
+  if (resultsContainer) {
+    const retireYr = Math.max(0, 65 - currentAge);
+    const ppliAtRetire = products.ppli.cashValues[retireYr] || 0;
+    const wlAtRetire = products.wholeLife.cashValues[retireYr] || 0;
+    const iulAtRetire = products.iul.cashValues[retireYr] || 0;
+    const taxableAtRetire = taxableValues[retireYr] || 0;
+
+    // Tax-free income via loans (approximately 4-5% of cash value)
+    const ppliIncome = Math.round(ppliAtRetire * 0.045);
+    const wlIncome = Math.round(wlAtRetire * 0.04);
+    const iulIncome = Math.round(iulAtRetire * 0.04);
+
+    const cards = [
+      { label: 'Total Premiums Paid', value: fmtFull(totalPremiums), note: `${fmtFull(premium)}/yr × ${premiumYears} years`, color: '#94a3b8' },
+      { label: 'PPLI Cash Value at 65', value: fmt(ppliAtRetire), note: `${((ppliAtRetire / totalPremiums - 1) * 100).toFixed(0)}% gain on premiums`, color: '#6366f1' },
+      { label: 'Whole Life Cash Value at 65', value: fmt(wlAtRetire), note: `Guaranteed + dividends`, color: '#10b981' },
+      { label: 'IUL Cash Value at 65', value: fmt(iulAtRetire), note: `Index-linked with 0% floor`, color: '#f59e0b' },
+      { label: 'Tax-Free Income (PPLI)', value: fmtFull(ppliIncome) + '/yr', note: 'Via policy loans — no tax due', color: '#6366f1' },
+      { label: 'Taxable Account at 65', value: fmt(taxableAtRetire), note: `After ${(taxBracket * 100).toFixed(0)}% taxes on gains`, color: '#ef4444' },
+    ];
+
+    resultsContainer.innerHTML = cards.map((c, i) => `
+      <div class="edu-result-card animate-in stagger-${i + 1}">
+        <div class="edu-result-label">${c.label}</div>
+        <div class="edu-result-value" style="color: ${c.color}">${c.value}</div>
+        <div class="edu-result-note">${c.note}</div>
+      </div>
+    `).join('');
+  }
+
+  // Cash value chart
+  const cvCtx = document.getElementById('insuranceCashValueChart');
+  if (cvCtx) {
+    if (insuranceCashValueChart) insuranceCashValueChart.destroy();
+    insuranceCashValueChart = new Chart(cvCtx, {
+      type: 'line',
+      data: {
+        labels: years.map(yr => 'Age ' + (currentAge + yr)),
+        datasets: [
+          { label: 'PPLI', data: products.ppli.cashValues, borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.08)', fill: true, borderWidth: 2.5, tension: 0.3, pointRadius: 0 },
+          { label: 'Whole Life', data: products.wholeLife.cashValues, borderColor: '#10b981', fill: false, borderWidth: 2, tension: 0.3, pointRadius: 0 },
+          { label: 'IUL', data: products.iul.cashValues, borderColor: '#f59e0b', fill: false, borderWidth: 2, tension: 0.3, pointRadius: 0 },
+          { label: 'Taxable Account', data: taxableValues, borderColor: '#ef4444', fill: false, borderWidth: 2, tension: 0.3, borderDash: [5, 3], pointRadius: 0 },
+          { label: 'Total Premiums', data: years.map(yr => premium * Math.min(yr, premiumYears)), borderColor: '#475569', fill: false, borderWidth: 1, tension: 0, borderDash: [3, 3], pointRadius: 0 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 12 } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+        },
+      },
+    });
+  }
+
+  // Death benefit comparison chart
+  const dbCtx = document.getElementById('insuranceComparisonChart');
+  if (dbCtx) {
+    if (insuranceComparisonChart) insuranceComparisonChart.destroy();
+    const age75Yr = Math.min(75 - currentAge, projectionYears);
+    const strategies = [
+      { name: 'PPLI', db: products.ppli.deathBenefits[age75Yr], cv: products.ppli.cashValues[age75Yr], color: '#6366f1' },
+      { name: 'Whole Life', db: products.wholeLife.deathBenefits[age75Yr], cv: products.wholeLife.cashValues[age75Yr], color: '#10b981' },
+      { name: 'IUL', db: products.iul.deathBenefits[age75Yr], cv: products.iul.cashValues[age75Yr], color: '#f59e0b' },
+      { name: 'Taxable (No Insurance)', db: 0, cv: taxableValues[age75Yr], color: '#ef4444' },
+    ];
+
+    insuranceComparisonChart = new Chart(dbCtx, {
+      type: 'bar',
+      data: {
+        labels: strategies.map(s => s.name),
+        datasets: [
+          {
+            label: 'Death Benefit (Tax-Free)',
+            data: strategies.map(s => s.db),
+            backgroundColor: strategies.map(s => s.color + '70'),
+            borderColor: strategies.map(s => s.color),
+            borderWidth: 2,
+            borderRadius: 6,
+          },
+          {
+            label: 'Cash Value',
+            data: strategies.map(s => s.cv),
+            backgroundColor: strategies.map(s => s.color + '30'),
+            borderColor: strategies.map(s => s.color),
+            borderWidth: 1,
+            borderRadius: 6,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11 } } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 12 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtFull(ctx.parsed.y)}` } },
+        },
+      },
+    });
+  }
+
+  // Tax-free income projection chart
+  const incCtx = document.getElementById('insuranceIncomeChart');
+  if (incCtx) {
+    if (insuranceIncomeChart) insuranceIncomeChart.destroy();
+    const incomeStartAge = 65;
+    const incomeStartYr = Math.max(0, incomeStartAge - currentAge);
+    const incomeYears = 90 - incomeStartAge;
+    const incomeAges = Array.from({ length: incomeYears + 1 }, (_, i) => incomeStartAge + i);
+
+    // Income from policy loans (4-5% of remaining cash value)
+    const buildIncomeData = (prod, rate) => {
+      let cv = prod.cashValues[incomeStartYr];
+      return incomeAges.map((_, i) => {
+        const income = Math.round(cv * rate);
+        cv = cv * (1 + prod.creditRate - prod.costRate) - income;
+        return Math.max(0, income);
+      });
+    };
+
+    insuranceIncomeChart = new Chart(incCtx, {
+      type: 'line',
+      data: {
+        labels: incomeAges.map(a => 'Age ' + a),
+        datasets: [
+          { label: 'PPLI (Tax-Free)', data: buildIncomeData(products.ppli, 0.045), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, borderWidth: 2.5, tension: 0.3, pointRadius: 0 },
+          { label: 'Whole Life (Tax-Free)', data: buildIncomeData(products.wholeLife, 0.04), borderColor: '#10b981', fill: false, borderWidth: 2, tension: 0.3, pointRadius: 0 },
+          { label: 'IUL (Tax-Free)', data: buildIncomeData(products.iul, 0.04), borderColor: '#f59e0b', fill: false, borderWidth: 2, tension: 0.3, pointRadius: 0 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { grid: { color: '#1e293b' }, ticks: { color: '#475569', font: { size: 10 }, callback: v => '$' + (v / 1000).toFixed(0) + 'K' } },
+        },
+        plugins: {
+          legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 10 } },
+          tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtFull(ctx.parsed.y)}/yr` } },
+        },
+      },
+    });
+  }
+
+  // Tips
+  const tipsContainer = document.getElementById('insurance-tips');
+  if (tipsContainer) {
+    tipsContainer.innerHTML = insuranceTips.map(tip => `
       <div class="edu-tip-card">
         <div class="edu-tip-header">
           <span class="edu-tip-title">${tip.title}</span>

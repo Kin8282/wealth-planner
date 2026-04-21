@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Wealth Strategy Planner — What-If Scenario Analysis</title>
-  <meta name="description" content="Interactive What-If Scenario Analysis for concentrated stock positions. Compare Charitable Trusts, Exchange Funds, Opportunity Zones, 529 plans, and more." />
+  <meta name="description" content="Interactive What-If Scenario Analysis for concentrated stock positions. Compare Charitable Trusts, Exchange Funds, Equity Compensation, QSBS, 1031 Exchanges, AQR systematic strategies, insurance options, 529 plans, and more." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -25,7 +25,7 @@
           <div class="header-badge">◆ PRIVATE WEALTH STRATEGY ENGINE</div>
           <h1 class="header-title">What-If Scenario Planner</h1>
           <p class="header-subtitle">
-            Concentrated Stock Analysis · Tax Strategy Optimizer · Estate Planning · Retirement
+            Concentrated Stock Analysis · Equity Comp & Founders · Tax Optimization · Estate · 1031 Exchange · AQR · Insurance
           </p>
         </div>
         <div class="header-actions">
@@ -166,6 +166,18 @@
     </button>
     <button class="tab-btn" data-tab="retirement" id="tab-retirement">
       <span class="tab-icon">🏖️</span> Retirement
+    </button>
+    <button class="tab-btn" data-tab="equity" id="tab-equity">
+      <span class="tab-icon">🦄</span> Equity & Founders
+    </button>
+    <button class="tab-btn" data-tab="1031exchange" id="tab-1031exchange">
+      <span class="tab-icon">🏘️</span> 1031 Exchange
+    </button>
+    <button class="tab-btn" data-tab="aqr" id="tab-aqr">
+      <span class="tab-icon">📐</span> AQR Strategy
+    </button>
+    <button class="tab-btn" data-tab="insurance" id="tab-insurance">
+      <span class="tab-icon">🛡️</span> Insurance
     </button>
     <button class="tab-btn" data-tab="playbook" id="tab-playbook">
       <span class="tab-icon">🎯</span> Playbook
@@ -472,6 +484,408 @@
       <div class="glass-panel" style="margin-top:24px;">
         <h3 class="chart-title">💡 529 Tax Benefits & Strategies</h3>
         <div class="edu-tips-grid" id="edu-tips-grid">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ EQUITY & FOUNDERS TAB ============ -->
+    <section id="panel-equity" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px;">
+        <div class="section-header">
+          <h2>🦄 Equity Compensation & Founder Strategies</h2>
+          <p class="section-desc">Model ISOs vs NSOs, visualize the AMT crossover trap, and project Section 1202 QSBS tax exclusions</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="eqOptionType">Equity Type</label>
+            <div class="input-wrapper">
+              <select id="eqOptionType">
+                <option value="iso">ISOs (Incentive Stock Options)</option>
+                <option value="nso">NSOs (Non-Qualified Options)</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="eqShares">Total Shares/Options</label>
+            <div class="input-wrapper">
+              <input type="number" id="eqShares" value="100000" min="1000" step="10000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="eqStrike">Strike Price (per share)</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="eqStrike" value="1.50" min="0" step="0.5" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="eqCurrentFmv">Current 409A / FMV</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="eqCurrentFmv" value="15.00" min="0.1" step="1" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="eqExitPrice">Projected Exit Price</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="eqExitPrice" value="50.00" min="1" step="5" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="eqQsbs">QSBS Eligible (Sec 1202)?</label>
+            <div class="input-wrapper">
+              <select id="eqQsbs">
+                <option value="no">No</option>
+                <option value="yes" selected>Yes (100% Exemption)</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="eqOrdinaryRate">Ordinary Income Rate</label>
+            <div class="input-wrapper">
+              <input type="number" id="eqOrdinaryRate" value="37" min="10" max="50" step="1" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="eqAmtRate">AMT Rate (for ISOs)</label>
+            <div class="input-wrapper">
+              <input type="number" id="eqAmtRate" value="28" min="26" max="28" step="2" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Equity Results -->
+      <div class="edu-results-grid" id="equity-results" style="margin-bottom:24px;">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div class="roi-charts-grid">
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Tax Breakdown at Exit</h3>
+          <p class="chart-subtitle">Allocation of exit value based on selected equity type and QSBS eligibility</p>
+          <div class="chart-container">
+            <canvas id="equityTaxChart"></canvas>
+          </div>
+        </div>
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Net After-Tax Value by Exit Scenario</h3>
+          <p class="chart-subtitle">Modeling after-tax proceeds across various acquisition/IPO prices</p>
+          <div class="chart-container">
+            <canvas id="equityScenarioChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">💡 Founder & Startup Equity Strategies</h3>
+        <div class="edu-tips-grid" id="equity-tips">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 1031 EXCHANGE TAB ============ -->
+    <section id="panel-1031exchange" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px;">
+        <div class="section-header">
+          <h2>🏘️ 1031 Like-Kind Exchange Analyzer</h2>
+          <p class="section-desc">Model tax-deferred real estate exchanges — compare selling vs. exchanging into income-producing property</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="exchangePropertyValue">Current Property Value</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="exchangePropertyValue" value="1000000" min="100000" step="50000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="exchangeCostBasis">Property Cost Basis</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="exchangeCostBasis" value="300000" min="0" step="25000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="exchangeTargetValue">Replacement Property Value</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="exchangeTargetValue" value="1200000" min="100000" step="50000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="exchangeCapRate">Cap Rate (Net Yield)</label>
+            <div class="input-wrapper">
+              <input type="number" id="exchangeCapRate" value="6" min="2" max="12" step="0.5" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="exchangeHoldPeriod">Hold Period</label>
+            <div class="input-wrapper">
+              <input type="number" id="exchangeHoldPeriod" value="20" min="5" max="40" step="1" />
+              <span class="input-suffix">years</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="exchangeAppreciation">Annual Appreciation</label>
+            <div class="input-wrapper">
+              <input type="number" id="exchangeAppreciation" value="3" min="0" max="10" step="0.5" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="exchangeDepreciation">Depreciation Method</label>
+            <div class="input-wrapper">
+              <select id="exchangeDepreciation">
+                <option value="straight">Straight-Line (27.5 yr)</option>
+                <option value="costseg">Cost Segregation (Accelerated)</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="exchangeLeverage">Leverage (LTV)</label>
+            <div class="input-wrapper">
+              <input type="number" id="exchangeLeverage" value="60" min="0" max="80" step="5" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="exchangeMortgageRate">Mortgage Rate</label>
+            <div class="input-wrapper">
+              <input type="number" id="exchangeMortgageRate" value="6.5" min="3" max="10" step="0.25" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1031 Results -->
+      <div class="edu-results-grid" id="exchange1031-results" style="margin-bottom:24px;">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div class="roi-charts-grid">
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Wealth Comparison: 1031 Exchange vs Sell & Pay Tax</h3>
+          <p class="chart-subtitle">Total equity including appreciation and rental income</p>
+          <div class="chart-container">
+            <canvas id="exchange1031Chart"></canvas>
+          </div>
+        </div>
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Cumulative Cash Flow & Tax Savings</h3>
+          <p class="chart-subtitle">Rental income + depreciation tax benefit over time</p>
+          <div class="chart-container">
+            <canvas id="exchange1031IncomeChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">💡 1031 Exchange Strategies & Rules</h3>
+        <div class="edu-tips-grid" id="exchange1031-tips">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ AQR STRATEGY TAB ============ -->
+    <section id="panel-aqr" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px;">
+        <div class="section-header">
+          <h2>📐 Systematic & Quantitative Strategy Comparison</h2>
+          <p class="section-desc">Compare institutional-grade approaches: Risk Parity, Managed Futures, Multi-Factor vs Traditional 60/40</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="aqrPortfolioSize">Portfolio Size</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="aqrPortfolioSize" value="1000000" min="100000" step="100000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="aqrHorizon">Investment Horizon</label>
+            <div class="input-wrapper">
+              <input type="number" id="aqrHorizon" value="20" min="5" max="40" step="1" />
+              <span class="input-suffix">years</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="aqrRiskTolerance">Risk Tolerance</label>
+            <div class="input-wrapper">
+              <select id="aqrRiskTolerance">
+                <option value="conservative">Conservative</option>
+                <option value="moderate" selected>Moderate</option>
+                <option value="aggressive">Aggressive</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="aqrLeverage">Leverage Factor</label>
+            <div class="input-wrapper">
+              <input type="number" id="aqrLeverage" value="1.0" min="0.5" max="2.0" step="0.1" />
+              <span class="input-suffix">×</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="aqrInflation">Expected Inflation</label>
+            <div class="input-wrapper">
+              <input type="number" id="aqrInflation" value="2.5" min="1" max="6" step="0.5" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="aqrRebalance">Rebalancing Frequency</label>
+            <div class="input-wrapper">
+              <select id="aqrRebalance">
+                <option value="monthly">Monthly</option>
+                <option value="quarterly" selected>Quarterly</option>
+                <option value="annually">Annually</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AQR Results -->
+      <div class="edu-results-grid" id="aqr-results" style="margin-bottom:24px;">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div class="roi-charts-grid">
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Portfolio Growth Comparison</h3>
+          <p class="chart-subtitle">Traditional 60/40 vs Risk Parity vs Managed Futures vs Multi-Factor</p>
+          <div class="chart-container">
+            <canvas id="aqrComparisonChart"></canvas>
+          </div>
+        </div>
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Factor Exposure Radar</h3>
+          <p class="chart-subtitle">Value, Momentum, Quality, Carry, Defensive, Trend</p>
+          <div class="chart-container radar-container">
+            <canvas id="aqrFactorChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Risk Metrics Table -->
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">Risk-Adjusted Metrics Comparison</h3>
+        <div class="table-wrapper">
+          <table id="aqr-metrics-table" class="data-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">💡 Systematic Investing Strategies</h3>
+        <div class="edu-tips-grid" id="aqr-tips">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ INSURANCE OPTIONS TAB ============ -->
+    <section id="panel-insurance" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px;">
+        <div class="section-header">
+          <h2>🛡️ Wealth-Oriented Insurance Strategies</h2>
+          <p class="section-desc">Compare PPLI, Whole Life, and IUL for tax-advantaged wealth accumulation and estate planning</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="insurancePremium">Annual Premium</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="insurancePremium" value="50000" min="5000" step="5000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="insurancePremiumYears">Premium Payment Period</label>
+            <div class="input-wrapper">
+              <input type="number" id="insurancePremiumYears" value="20" min="5" max="40" step="1" />
+              <span class="input-suffix">years</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="insuranceAge">Current Age</label>
+            <div class="input-wrapper">
+              <input type="number" id="insuranceAge" value="45" min="25" max="65" step="1" />
+              <span class="input-suffix">years</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="insuranceCoverage">Target Death Benefit</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">$</span>
+              <input type="number" id="insuranceCoverage" value="5000000" min="500000" step="500000" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="insuranceTaxBracket">Marginal Tax Bracket</label>
+            <div class="input-wrapper">
+              <select id="insuranceTaxBracket">
+                <option value="0.37" selected>37% (Top)</option>
+                <option value="0.35">35%</option>
+                <option value="0.32">32%</option>
+                <option value="0.24">24%</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="insuranceAltReturn">Alt. Taxable Return</label>
+            <div class="input-wrapper">
+              <input type="number" id="insuranceAltReturn" value="7" min="3" max="15" step="0.5" />
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Insurance Results -->
+      <div class="edu-results-grid" id="insurance-results" style="margin-bottom:24px;">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div class="roi-charts-grid">
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Cash Value Accumulation</h3>
+          <p class="chart-subtitle">PPLI vs Whole Life vs IUL vs Taxable Account</p>
+          <div class="chart-container">
+            <canvas id="insuranceCashValueChart"></canvas>
+          </div>
+        </div>
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Death Benefit & Estate Impact</h3>
+          <p class="chart-subtitle">Net benefit to heirs by strategy</p>
+          <div class="chart-container">
+            <canvas id="insuranceComparisonChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Insurance income projection -->
+      <div class="glass-panel chart-panel" style="margin-top:24px;">
+        <h3 class="chart-title">Tax-Free Retirement Income via Policy Loans</h3>
+        <p class="chart-subtitle">Annual tax-free income available from each policy type starting at age 65</p>
+        <div class="chart-container">
+          <canvas id="insuranceIncomeChart"></canvas>
+        </div>
+      </div>
+
+      <div class="glass-panel" style="margin-top:24px;">
+        <h3 class="chart-title">💡 Insurance Planning Strategies</h3>
+        <div class="edu-tips-grid" id="insurance-tips">
           <!-- Rendered by JS -->
         </div>
       </div>
