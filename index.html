@@ -56,91 +56,7 @@
     </div>
   </div>
 
-  <!-- Scenario Inputs -->
-  <section id="scenario-inputs" class="glass-panel">
-    <div class="section-header">
-      <h2>⚙️ Your Scenario Parameters</h2>
-      <p class="section-desc">Adjust values to see how each strategy performs under your conditions</p>
-    </div>
-    <div class="input-grid">
-      <div class="input-group">
-        <label for="stockValue">Stock Position Value</label>
-        <div class="input-wrapper">
-          <span class="input-prefix">$</span>
-          <input type="number" id="stockValue" value="1000000" min="100000" step="50000" />
-        </div>
-      </div>
-      <div class="input-group">
-        <label for="costBasis">Cost Basis</label>
-        <div class="input-wrapper">
-          <span class="input-prefix">$</span>
-          <input type="number" id="costBasis" value="100000" min="0" step="10000" />
-        </div>
-      </div>
-      <div class="input-group">
-        <label for="annualReturn">Expected Annual Return</label>
-        <div class="input-wrapper">
-          <input type="number" id="annualReturn" value="7" min="1" max="20" step="0.5" />
-          <span class="input-suffix">%</span>
-        </div>
-      </div>
-      <div class="input-group">
-        <label for="timeHorizon">Time Horizon</label>
-        <div class="input-wrapper">
-          <input type="number" id="timeHorizon" value="20" min="5" max="40" step="1" />
-          <span class="input-suffix">Years</span>
-        </div>
-      </div>
-      <div class="input-group">
-        <label for="taxBracket">Marginal Tax Bracket</label>
-        <div class="input-wrapper">
-          <select id="taxBracket">
-            <option value="0.37">37% (Top Bracket)</option>
-            <option value="0.35">35%</option>
-            <option value="0.32">32%</option>
-            <option value="0.24">24%</option>
-            <option value="0.22">22%</option>
-          </select>
-        </div>
-      </div>
-      <div class="input-group">
-        <label for="stateRate">State Capital Gains Rate</label>
-        <div class="input-wrapper">
-          <input type="number" id="stateRate" value="0" min="0" max="14" step="0.1" />
-          <span class="input-suffix">%</span>
-        </div>
-      </div>
-    </div>
-    <!-- Live computed summary -->
-    <div id="live-summary" class="live-summary-bar">
-      <div class="summary-item">
-        <span class="summary-label">Unrealized Gain</span>
-        <span class="summary-value gain" id="unrealizedGain">$900,000</span>
-      </div>
-      <div class="summary-divider"></div>
-      <div class="summary-item">
-        <span class="summary-label">Fed Cap Gains Tax</span>
-        <span class="summary-value tax" id="fedTax">$214,200</span>
-      </div>
-      <div class="summary-divider"></div>
-      <div class="summary-item">
-        <span class="summary-label">State Tax</span>
-        <span class="summary-value tax" id="stateTax">$0</span>
-      </div>
-      <div class="summary-divider"></div>
-      <div class="summary-item">
-        <span class="summary-label">Total Tax if Sold</span>
-        <span class="summary-value tax-total" id="totalTax">$214,200</span>
-      </div>
-      <div class="summary-divider"></div>
-      <div class="summary-item">
-        <span class="summary-label">After-Tax Proceeds</span>
-        <span class="summary-value preserved" id="afterTax">$785,800</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- Navigation Tabs -->
+  <!-- Navigation Tabs — full width, above sidebar layout -->
   <nav id="tab-nav">
     <button class="tab-btn active" data-tab="strategies" id="tab-strategies">
       <span class="tab-icon">📊</span> Strategy Comparison
@@ -184,9 +100,114 @@
     <button class="tab-btn" data-tab="playbook" id="tab-playbook">
       <span class="tab-icon">🎯</span> Playbook
     </button>
+    <button class="tab-btn" data-tab="networth" id="tab-networth">
+      <span class="tab-icon">💎</span> Net Worth
+    </button>
+    <button class="tab-btn" data-tab="roth" id="tab-roth">
+      <span class="tab-icon">🔄</span> Roth Ladder
+    </button>
+    <button class="tab-btn" data-tab="rmd" id="tab-rmd">
+      <span class="tab-icon">📅</span> RMD Planner
+    </button>
+    <button class="tab-btn" data-tab="businesssale" id="tab-businesssale">
+      <span class="tab-icon">🏢</span> Business Sale
+    </button>
+    <button class="tab-btn" data-tab="yearend" id="tab-yearend">
+      <span class="tab-icon">📋</span> Year-End Checklist
+    </button>
+    <button class="tab-btn" data-tab="compare" id="tab-compare">
+      <span class="tab-icon">⚖️</span> Compare Scenarios
+    </button>
+    <button class="tab-btn" data-tab="aichat" id="tab-aichat">
+      <span class="tab-icon">🤖</span> AI Advisor
+    </button>
   </nav>
 
-  <!-- Tab Content Area -->
+  <!-- App Body: sidebar on right, tab content on left -->
+  <div class="app-body">
+
+    <!-- Right Sidebar: Scenario Inputs -->
+    <aside id="scenario-inputs" class="glass-panel scenario-sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-badge">⚙️ PARAMETERS</span>
+      </div>
+      <div class="input-grid sidebar-input-grid">
+        <div class="input-group">
+          <label for="stockValue">Stock Value</label>
+          <div class="input-wrapper">
+            <span class="input-prefix">$</span>
+            <input type="number" id="stockValue" value="1000000" min="100000" step="50000" />
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="costBasis">Cost Basis</label>
+          <div class="input-wrapper">
+            <span class="input-prefix">$</span>
+            <input type="number" id="costBasis" value="100000" min="0" step="10000" />
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="annualReturn">Annual Return</label>
+          <div class="input-wrapper">
+            <input type="number" id="annualReturn" value="7" min="1" max="20" step="0.5" />
+            <span class="input-suffix">%</span>
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="timeHorizon">Time Horizon</label>
+          <div class="input-wrapper">
+            <input type="number" id="timeHorizon" value="20" min="5" max="40" step="1" />
+            <span class="input-suffix">yrs</span>
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="taxBracket">Tax Bracket</label>
+          <div class="input-wrapper">
+            <select id="taxBracket">
+              <option value="0.37">37% (Top)</option>
+              <option value="0.35">35%</option>
+              <option value="0.32">32%</option>
+              <option value="0.24">24%</option>
+              <option value="0.22">22%</option>
+            </select>
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="stateRate">State Cap Gains</label>
+          <div class="input-wrapper">
+            <input type="number" id="stateRate" value="0" min="0" max="14" step="0.1" />
+            <span class="input-suffix">%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live computed summary — vertical in sidebar -->
+      <div id="live-summary" class="live-summary-sidebar">
+        <div class="sidebar-summary-row">
+          <span class="summary-label">Unrealized Gain</span>
+          <span class="summary-value gain" id="unrealizedGain">$900,000</span>
+        </div>
+        <div class="sidebar-summary-row">
+          <span class="summary-label">Fed Cap Gains</span>
+          <span class="summary-value tax" id="fedTax">$214,200</span>
+        </div>
+        <div class="sidebar-summary-row">
+          <span class="summary-label">State Tax</span>
+          <span class="summary-value tax" id="stateTax">$0</span>
+        </div>
+        <div class="sidebar-summary-row highlight-row">
+          <span class="summary-label">Total Tax if Sold</span>
+          <span class="summary-value tax-total" id="totalTax">$214,200</span>
+        </div>
+        <div class="sidebar-summary-row">
+          <span class="summary-label">After-Tax Proceeds</span>
+          <span class="summary-value preserved" id="afterTax">$785,800</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main content: only tab panels, no tab nav -->
+    <div class="app-main-col">
   <main id="tab-content">
 
     <!-- ============ STRATEGIES TAB ============ -->
@@ -1126,12 +1147,280 @@
       </div>
     </section>
 
+    <!-- ============ NET WORTH DASHBOARD ============ -->
+    <section id="panel-networth" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px">
+        <div class="section-header">
+          <h2>💎 Net Worth Dashboard</h2>
+          <p class="section-desc">Holistic view of all your assets, liabilities, and growth trajectory</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="nwStocks">Concentrated Stock Position</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="nwStocks" value="1000000" min="0" step="50000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="nwRealEstate">Real Estate Equity</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="nwRealEstate" value="500000" min="0" step="50000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="nwRetirement">401k / Traditional IRA</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="nwRetirement" value="300000" min="0" step="25000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="nwRothIra">Roth IRA</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="nwRothIra" value="100000" min="0" step="10000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="nwPrivateEquity">Private Equity / Venture</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="nwPrivateEquity" value="0" min="0" step="25000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="nwCrypto">Crypto / Digital Assets</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="nwCrypto" value="0" min="0" step="10000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="nwBusiness">Business Interests</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="nwBusiness" value="0" min="0" step="50000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="nwCash">Cash / Bonds / Other</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="nwCash" value="150000" min="0" step="10000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="nwLiabilities">Total Liabilities (Mortgage, Loans)</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="nwLiabilities" value="200000" min="0" step="25000" /></div>
+          </div>
+        </div>
+      </div>
+      <div class="edu-results-grid" id="nw-summary" style="margin-bottom:24px"></div>
+      <div class="roi-charts-grid">
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Asset Allocation</h3>
+          <p class="chart-subtitle">Portfolio composition by asset class</p>
+          <div class="chart-container"><canvas id="netWorthPieChart"></canvas></div>
+        </div>
+        <div class="glass-panel chart-panel">
+          <h3 class="chart-title">Net Worth Growth Projection</h3>
+          <p class="chart-subtitle">Compounding across all asset classes over your time horizon</p>
+          <div class="chart-container"><canvas id="netWorthGrowthChart"></canvas></div>
+        </div>
+      </div>
+      <div class="glass-panel" style="margin-top:24px" id="nw-liquidity"></div>
+    </section>
+
+    <!-- ============ ROTH CONVERSION LADDER ============ -->
+    <section id="panel-roth" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px">
+        <div class="section-header">
+          <h2>🔄 Roth Conversion Ladder</h2>
+          <p class="section-desc">Model systematic Roth conversions to reduce future RMDs and build a tax-free inheritance</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="rothIraBalance">Traditional IRA Balance</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="rothIraBalance" value="500000" min="0" step="25000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="rothCurrentAge">Current Age</label>
+            <div class="input-wrapper"><input type="number" id="rothCurrentAge" value="50" min="25" max="72" step="1" /><span class="input-suffix">yrs</span></div>
+          </div>
+          <div class="input-group">
+            <label for="rothConversionYears">Years to Convert</label>
+            <div class="input-wrapper"><input type="number" id="rothConversionYears" value="15" min="1" max="30" step="1" /><span class="input-suffix">yrs</span></div>
+          </div>
+          <div class="input-group">
+            <label for="rothAnnualConversion">Annual Conversion Amount</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="rothAnnualConversion" value="50000" min="1000" step="5000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="rothReturnRate">Expected Return Rate</label>
+            <div class="input-wrapper"><input type="number" id="rothReturnRate" value="7" min="1" max="15" step="0.5" /><span class="input-suffix">%</span></div>
+          </div>
+          <div class="input-group">
+            <label for="rothTaxBracket">Conversion Tax Bracket</label>
+            <div class="input-wrapper">
+              <select id="rothTaxBracket">
+                <option value="0.37">37% (Top)</option>
+                <option value="0.35">35%</option>
+                <option value="0.32">32%</option>
+                <option value="0.24" selected>24%</option>
+                <option value="0.22">22%</option>
+                <option value="0.12">12%</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="edu-results-grid" id="roth-results" style="margin-bottom:24px"></div>
+      <div class="glass-panel chart-panel" style="margin-bottom:24px">
+        <h3 class="chart-title">Roth Conversion Strategy — Wealth Trajectory</h3>
+        <p class="chart-subtitle">Compare converted vs. no-conversion outcome over time</p>
+        <div class="chart-container"><canvas id="rothChart"></canvas></div>
+      </div>
+      <div class="glass-panel">
+        <h3 class="chart-title">Year-by-Year Conversion Schedule</h3>
+        <div class="table-wrapper">
+          <table id="roth-year-table" class="data-table"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ RMD PLANNER ============ -->
+    <section id="panel-rmd" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px">
+        <div class="section-header">
+          <h2>📅 Required Minimum Distribution Planner</h2>
+          <p class="section-desc">Project your RMD schedule, tax burden, and Qualified Charitable Distribution (QCD) opportunities</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="rmdIraBalance">Traditional IRA / 401k Balance</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="rmdIraBalance" value="1000000" min="0" step="50000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="rmdCurrentAge">Current Age</label>
+            <div class="input-wrapper"><input type="number" id="rmdCurrentAge" value="65" min="40" max="90" step="1" /><span class="input-suffix">yrs</span></div>
+          </div>
+          <div class="input-group">
+            <label for="rmdReturnRate">Expected Return Rate</label>
+            <div class="input-wrapper"><input type="number" id="rmdReturnRate" value="5" min="0" max="12" step="0.5" /><span class="input-suffix">%</span></div>
+          </div>
+          <div class="input-group">
+            <label for="rmdTaxBracket">Tax Bracket at RMD Time</label>
+            <div class="input-wrapper">
+              <select id="rmdTaxBracket">
+                <option value="0.37">37%</option>
+                <option value="0.35">35%</option>
+                <option value="0.32" selected>32%</option>
+                <option value="0.24">24%</option>
+                <option value="0.22">22%</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="edu-results-grid" id="rmd-results" style="margin-bottom:24px"></div>
+      <div class="glass-panel chart-panel" style="margin-bottom:24px">
+        <h3 class="chart-title">Annual RMD Schedule — Age 70 to 92</h3>
+        <p class="chart-subtitle">⚠️ RMDs begin at age 73. Yellow bars = forced withdrawals. Red = tax cost.</p>
+        <div class="chart-container"><canvas id="rmdChart"></canvas></div>
+      </div>
+      <div class="glass-panel">
+        <h3 class="chart-title">RMD Detail Table</h3>
+        <div class="table-wrapper">
+          <table id="rmd-table" class="data-table"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ BUSINESS SALE PLANNER ============ -->
+    <section id="panel-businesssale" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px">
+        <div class="section-header">
+          <h2>🏢 Business Sale Planner</h2>
+          <p class="section-desc">Compare stock sale vs. asset sale, installment structures, QSBS exclusions, and C-Corp double tax</p>
+        </div>
+        <div class="edu-input-grid">
+          <div class="input-group">
+            <label for="bizValue">Business Sale Price</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="bizValue" value="5000000" min="100000" step="250000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="bizBasis">Adjusted Tax Basis</label>
+            <div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="bizBasis" value="500000" min="0" step="50000" /></div>
+          </div>
+          <div class="input-group">
+            <label for="bizEntityType">Entity Type</label>
+            <div class="input-wrapper">
+              <select id="bizEntityType">
+                <option value="scorp">S-Corp / LLC (Pass-through)</option>
+                <option value="ccorp">C-Corporation (Double Tax)</option>
+                <option value="sole">Sole Proprietorship</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="bizInstallments">Installment Sale Years</label>
+            <div class="input-wrapper"><input type="number" id="bizInstallments" value="1" min="1" max="20" step="1" /><span class="input-suffix">yr (1=lump sum)</span></div>
+          </div>
+          <div class="input-group">
+            <label for="bizInstallRate">Interest Rate on Note</label>
+            <div class="input-wrapper"><input type="number" id="bizInstallRate" value="5" min="1" max="12" step="0.5" /><span class="input-suffix">%</span></div>
+          </div>
+          <div class="input-group">
+            <label for="bizQsbs">QSBS Eligible (Sec 1202)?</label>
+            <div class="input-wrapper">
+              <select id="bizQsbs">
+                <option value="no">No</option>
+                <option value="yes">Yes — 100% Federal Exclusion</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="bizTaxBracket">Ordinary Income Tax Bracket</label>
+            <div class="input-wrapper">
+              <select id="bizTaxBracket">
+                <option value="0.37" selected>37% (Top)</option>
+                <option value="0.35">35%</option>
+                <option value="0.32">32%</option>
+                <option value="0.24">24%</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="edu-results-grid" id="biz-results" style="margin-bottom:24px"></div>
+      <div class="glass-panel chart-panel" style="margin-bottom:24px">
+        <h3 class="chart-title">Net Proceeds by Sale Structure</h3>
+        <p class="chart-subtitle">After-tax proceeds and total tax paid for each approach</p>
+        <div class="chart-container"><canvas id="bizSaleChart"></canvas></div>
+      </div>
+      <div class="glass-panel" id="install-table-wrap" style="display:none">
+        <h3 class="chart-title">Installment Sale Cash Flow Schedule</h3>
+        <div class="table-wrapper">
+          <table id="install-table" class="data-table"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ YEAR-END ACTION CHECKLIST ============ -->
+    <section id="panel-yearend" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px">
+        <div class="section-header">
+          <h2>📋 Year-End Action Checklist</h2>
+          <p class="section-desc">Dynamic priority actions based on your scenario — sorted by impact and urgency</p>
+        </div>
+        <p style="font-size:13px;color:var(--text-muted)">Actions are personalized to your scenario parameters. Update the inputs above to refresh the checklist.</p>
+      </div>
+      <div id="yearend-checklist"></div>
+    </section>
+
+    <!-- ============ SCENARIO COMPARISON DASHBOARD ============ -->
+    <section id="panel-compare" class="tab-panel">
+      <div class="glass-panel" style="margin-bottom:24px">
+        <div class="section-header">
+          <h2>⚖️ Scenario Comparison Dashboard</h2>
+          <p class="section-desc">Compare all saved scenarios side by side with delta highlighting</p>
+        </div>
+      </div>
+      <div id="scenario-compare-content"></div>
+    </section>
+
+    <!-- ============ AI CHAT ADVISOR ============ -->
+    <section id="panel-aichat" class="tab-panel">
+      <div id="ai-chat-container"></div>
+    </section>
+
   </main>
+  </div><!-- end app-main-col -->
+</div><!-- end app-body -->
 
   <footer id="app-footer">
     <p>Built for strategic wealth planning · All projections are estimates · Not financial advice</p>
   </footer>
 
   <script src="app.js"></script>
+  <script src="features.js"></script>
 </body>
 </html>

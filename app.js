@@ -376,20 +376,27 @@ function initTabs() {
 
 function rebuildCurrentTab(tab) {
   switch(tab) {
-    case 'strategies': renderStrategies(); renderRadarChart(); break;
-    case 'roi': renderROI(); break;
-    case 'montecarlo': renderMonteCarlo(); break;
-    case 'income': renderIncomeBreakeven(); break;
-    case 'tax': renderTaxTab(); break;
-    case 'relocation': renderRelocation(); break;
-    case 'education': renderEducation(); break;
-    case 'estate': renderEstate(); break;
-    case 'retirement': renderRetirement(); break;
-    case 'equity': renderEquity(); break;
+    case 'strategies':   renderStrategies(); renderRadarChart(); break;
+    case 'roi':          renderROI(); break;
+    case 'montecarlo':   renderMonteCarlo(); break;
+    case 'income':       renderIncomeBreakeven(); break;
+    case 'tax':          renderTaxTab(); break;
+    case 'relocation':   renderRelocation(); break;
+    case 'education':    renderEducation(); break;
+    case 'estate':       renderEstate(); break;
+    case 'retirement':   renderRetirement(); break;
+    case 'equity':       renderEquity(); break;
     case '1031exchange': render1031Exchange(); break;
-    case 'aqr': renderAQR(); break;
-    case 'insurance': renderInsurance(); break;
-    case 'playbook': renderPlaybook(); break;
+    case 'aqr':          renderAQR(); break;
+    case 'insurance':    renderInsurance(); break;
+    case 'playbook':     renderPlaybook(); break;
+    case 'networth':     renderNetWorth(); break;
+    case 'roth':         renderRothConversion(); break;
+    case 'rmd':          renderRMD(); break;
+    case 'businesssale': renderBusinessSale(); break;
+    case 'yearend':      renderYearEndChecklist(); break;
+    case 'compare':      renderScenarioComparison(); break;
+    case 'aichat':       renderAIChat(); break;
   }
 }
 
@@ -1927,6 +1934,39 @@ function initInputListeners() {
         if (activeTab === 'insurance') renderInsurance();
       }, 300));
     }
+  });
+
+  // Net Worth inputs
+  const nwInputs = ['nwStocks','nwRealEstate','nwRetirement','nwRothIra','nwPrivateEquity','nwCrypto','nwBusiness','nwCash','nwLiabilities'];
+  nwInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', debounce(() => {
+      if (document.querySelector('.tab-btn.active')?.dataset.tab === 'networth') renderNetWorth();
+    }, 300));
+  });
+
+  // Roth inputs
+  ['rothIraBalance','rothCurrentAge','rothConversionYears','rothAnnualConversion','rothReturnRate','rothTaxBracket'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', debounce(() => {
+      if (document.querySelector('.tab-btn.active')?.dataset.tab === 'roth') renderRothConversion();
+    }, 300));
+  });
+
+  // RMD inputs
+  ['rmdIraBalance','rmdCurrentAge','rmdReturnRate','rmdTaxBracket'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', debounce(() => {
+      if (document.querySelector('.tab-btn.active')?.dataset.tab === 'rmd') renderRMD();
+    }, 300));
+  });
+
+  // Business Sale inputs
+  ['bizValue','bizBasis','bizEntityType','bizInstallments','bizInstallRate','bizQsbs','bizTaxBracket'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', debounce(() => {
+      if (document.querySelector('.tab-btn.active')?.dataset.tab === 'businesssale') renderBusinessSale();
+    }, 300));
   });
 }
 
