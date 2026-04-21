@@ -3566,56 +3566,164 @@ async function exportPDF() {
 
   const safeWithdrawal = Math.round(stockValue * 0.04);
 
-  let radarImgHtml = '';
-  try {
-    const tempRadarDiv = document.createElement('div');
-    tempRadarDiv.style.width = '1200px';
-    tempRadarDiv.style.height = '1200px';
-    tempRadarDiv.style.position = 'fixed';
-    tempRadarDiv.style.top = '-4000px'; 
-    tempRadarDiv.style.left = '0';
-    tempRadarDiv.style.display = 'block'; 
-    document.body.appendChild(tempRadarDiv);
+  // Helper to extract a chart to a static high-res Base64 img tag synchronously
+  function extractChartImg(config, width = 1200, height = 600, maxWidth = '800px') {
+    let imgHtml = '';
+    try {
+      const tempDiv = document.createElement('div');
+      tempDiv.style.width = width + 'px';
+      tempDiv.style.height = height + 'px';
+      tempDiv.style.position = 'fixed';
+      tempDiv.style.top = '-4000px'; 
+      tempDiv.style.left = '0';
+      tempDiv.style.display = 'block'; 
+      document.body.appendChild(tempDiv);
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = 1200;
-    tempCanvas.height = 1200;
-    tempRadarDiv.appendChild(tempCanvas);
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = width;
+      tempCanvas.height = height;
+      tempDiv.appendChild(tempCanvas);
 
-    const tempChart = new Chart(tempCanvas, {
-      type: 'radar',
-      data: {
-        labels: radarMetrics.map(m => m.subject),
-        datasets: [
-          { label: 'Exchange Fund', data: radarMetrics.map(m => m.exchange), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.12)', borderWidth: 5, pointRadius: 6 },
-          { label: 'Charitable Trust', data: radarMetrics.map(m => m.crt), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 5, pointRadius: 6 },
-          { label: 'Sell & Reinvest', data: radarMetrics.map(m => m.sell), borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.06)', borderWidth: 5, pointRadius: 6 },
-          { label: 'Opp Zone', data: radarMetrics.map(m => m.ozone), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.08)', borderWidth: 5, pointRadius: 6 },
-        ]
+      // Force no animation for instantaneous capture
+      if (!config.options) config.options = {};
+      config.options.animation = false;
+      config.options.responsive = false;
+
+      new Chart(tempCanvas, config);
+      imgHtml = `<img src="${tempCanvas.toDataURL('image/png', 1.0)}" style="width: 100%; max-width: ${maxWidth}; display: block; margin: 20px auto; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05)); border: 1px solid #e2e8f0; border-radius: 8px; background: white;" />`;
+      
+      document.body.removeChild(tempDiv);
+    } catch(e) { console.error('Chart snapshot failed:', e); }
+    return imgHtml;
+  }
+
+  // 1. Radar Chart Extraction
+  const radarImgHtml = extractChartImg({
+    type: 'radar',
+    data: {
+      labels: radarMetrics.map(m => m.subject),
+      datasets: [
+        { label: 'Exchange Fund', data: radarMetrics.map(m => m.exchange), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.12)', borderWidth: 5, pointRadius: 6 },
+        { label: 'Charitable Trust', data: radarMetrics.map(m => m.crt), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 5, pointRadius: 6 },
+        { label: 'Sell & Reinvest', data: radarMetrics.map(m => m.sell), borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.06)', borderWidth: 5, pointRadius: 6 },
+        { label: 'Opp Zone', data: radarMetrics.map(m => m.ozone), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.08)', borderWidth: 5, pointRadius: 6 },
+      ]
+    },
+    options: { 
+      layout: { padding: 40 },
+      plugins: { legend: { position: 'top', labels: { font: { size: 28, family: "'Helvetica Neue', sans-serif" }, padding: 30, usePointStyle: true, pointStyle: 'rectRounded' } } },
+      scales: { r: { ticks: { display: false }, pointLabels: { font: { size: 24, weight: 'bold', family: "'Helvetica Neue', sans-serif" }, color: '#334155' }, grid: { color: '#e2e8f0', lineWidth: 2 }, angleLines: { color: '#cbd5e1', lineWidth: 2 } } }
+    }
+  }, 1200, 1200, '450px');
+
+  // Regenerate localized projection arrays for deep dive charts
+  const projYears = Array.from({length: timeHorizon}, (_, i) => i + 1);
+  const yearsWithZero = Array.from({length: timeHorizon + 1}, (_, i) => i);
+  const sellData = projYears.map(yr => Math.round(afterTax * Math.pow(1 + annualReturn, yr)));
+  const exchangeData = projYears.map(yr => Math.round(stockValue * Math.pow(1 + annualReturn * 0.935, yr)));
+  const crtData = projYears.map(yr => Math.round(stockValue * Math.pow(1 + annualReturn * 0.94, yr)));
+  
+  // 2. Projection Chart Extraction
+  const projImgHtml = extractChartImg({
+    type: 'line',
+    data: {
+      labels: projYears.map(yr => 'Yr ' + yr),
+      datasets: [
+        { label: 'Standard Liquidation (Sell)', data: sellData, borderColor: '#ef4444', borderWidth: 4, pointRadius: 0, fill: false },
+        { label: 'Exchange Fund (721)', data: exchangeData, borderColor: '#6366f1', borderWidth: 4, pointRadius: 0, fill: false },
+        { label: 'Charitable Trust (CRT)', data: crtData, borderColor: '#10b981', borderWidth: 4, pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      layout: { padding: 30 },
+      scales: { 
+        x: { grid: { color: '#e2e8f0' }, ticks: { font: { size: 18, family: "'Helvetica Neue', sans-serif" }, color: '#334155' } },
+        y: { grid: { color: '#e2e8f0' }, ticks: { font: { size: 18, family: "'Helvetica Neue', sans-serif" }, color: '#334155', callback: v => '$' + (v / 1_000_000).toFixed(1) + 'M' } }
       },
-      options: { 
-        responsive: false, animation: false,
-        layout: { padding: 40 },
-        plugins: { 
-          legend: { 
-            position: 'top', 
-            labels: { font: { size: 28, family: "'Helvetica Neue', sans-serif" }, padding: 30, usePointStyle: true, pointStyle: 'rectRounded' } 
-          } 
-        },
-        scales: { 
-          r: { 
-            ticks: { display: false },
-            pointLabels: { font: { size: 24, weight: 'bold', family: "'Helvetica Neue', sans-serif" }, color: '#334155' },
-            grid: { color: '#e2e8f0', lineWidth: 2 },
-            angleLines: { color: '#cbd5e1', lineWidth: 2 }
-          } 
-        }
-      }
-    });
+      plugins: { legend: { position: 'top', labels: { font: { size: 24, family: "'Helvetica Neue', sans-serif" }, usePointStyle: true, padding: 30 } } }
+    }
+  });
 
-    radarImgHtml = `<img src="${tempCanvas.toDataURL('image/png', 1.0)}" style="width: 100%; max-width: 450px; display: block; margin: 0 auto; padding: 0;" />`;
-    document.body.removeChild(tempRadarDiv);
-  } catch(e) { console.error('Radar snapshot failed:', e); }
+  // 3. Tax Drag Chart Extraction
+  const dragData = projYears.map((yr, i) => exchangeData[i] - sellData[i]);
+  const taxDragImgHtml = extractChartImg({
+    type: 'bar',
+    data: {
+      labels: projYears.map(yr => 'Yr ' + yr),
+      datasets: [{ label: 'Tax Drag Cost (Lost Wealth)', data: dragData, backgroundColor: 'rgba(239, 68, 68, 0.6)', borderColor: '#ef4444', borderWidth: 2 }]
+    },
+    options: {
+      layout: { padding: 30 },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 18, family: "'Helvetica Neue', sans-serif" }, color: '#334155' } },
+        y: { grid: { color: '#e2e8f0' }, ticks: { font: { size: 18, family: "'Helvetica Neue', sans-serif" }, color: '#334155', callback: v => '$' + (v / 1_000).toFixed(0) + 'K' } }
+      },
+      plugins: { legend: { position: 'top', labels: { font: { size: 24, family: "'Helvetica Neue', sans-serif" }, usePointStyle: true, padding: 30 } } }
+    }
+  });
+
+  // 4. Income Chart Extraction
+  const incCrt = yearsWithZero.map(yr => Math.round(crtData[Math.max(0, yr-1)] * 0.06));
+  const incEx = yearsWithZero.map(yr => Math.round(exchangeData[Math.max(0, yr-1)] * 0.015));
+  const incSell = yearsWithZero.map(yr => Math.round(sellData[Math.max(0, yr-1)] * 0.02));
+  const incomeImgHtml = extractChartImg({
+    type: 'line',
+    data: {
+      labels: yearsWithZero.map(yr => 'Yr ' + yr),
+      datasets: [
+        { label: 'CRT Income (6%)', data: incCrt, borderColor: '#10b981', borderWidth: 4, pointRadius: 0, fill: false },
+        { label: 'Exchange Dividends (1.5%)', data: incEx, borderColor: '#6366f1', borderWidth: 4, pointRadius: 0, fill: false },
+        { label: 'Sell Dividends (2%)', data: incSell, borderColor: '#ef4444', borderWidth: 4, pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      layout: { padding: 30 },
+      scales: {
+        x: { grid: { color: '#e2e8f0' }, ticks: { font: { size: 18, family: "'Helvetica Neue', sans-serif" }, color: '#334155' } },
+        y: { grid: { color: '#e2e8f0' }, ticks: { font: { size: 18, family: "'Helvetica Neue', sans-serif" }, color: '#334155', callback: v => '$' + (v / 1_000).toFixed(0) + 'K' } }
+      },
+      plugins: { legend: { position: 'top', labels: { font: { size: 24, family: "'Helvetica Neue', sans-serif" }, usePointStyle: true, padding: 30 } } }
+    }
+  });
+
+  // 5. Breakeven Trajectory Chart
+  const bkEx = yearsWithZero.map((yr, i) => (yr===0?stockValue:exchangeData[i-1]) - (yr===0?afterTax:sellData[i-1]));
+  const bkCrt = yearsWithZero.map((yr, i) => (yr===0?stockValue:crtData[i-1]) - (yr===0?afterTax:sellData[i-1]));
+  const breakevenImgHtml = extractChartImg({
+    type: 'line',
+    data: {
+      labels: yearsWithZero.map(yr => 'Yr ' + yr),
+      datasets: [
+        { label: 'Exchange vs Sell', data: bkEx, borderColor: '#6366f1', borderWidth: 4, pointRadius: 0, fill: 'origin', backgroundColor: 'rgba(99,102,241,0.1)' },
+        { label: 'CRT vs Sell', data: bkCrt, borderColor: '#10b981', borderWidth: 4, pointRadius: 0, fill: false },
+        { label: 'Breakeven Baseline', data: yearsWithZero.map(()=>0), borderColor: '#475569', borderWidth: 2, borderDash: [5,5], pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      layout: { padding: 30 },
+      scales: {
+        x: { grid: { color: '#e2e8f0' }, ticks: { font: { size: 18, family: "'Helvetica Neue', sans-serif" }, color: '#334155' } },
+        y: { grid: { color: '#e2e8f0' }, ticks: { font: { size: 18, family: "'Helvetica Neue', sans-serif" }, color: '#334155', callback: v => (v>=0?'+':'') + '$' + (v / 1_000).toFixed(0) + 'K' } }
+      },
+      plugins: { legend: { position: 'top', labels: { font: { size: 24, family: "'Helvetica Neue', sans-serif" }, usePointStyle: true, padding: 30 } } }
+    }
+  });
+
+  // Render Table Logic Row Builder for Deep Dive
+  let ledgerRows = '';
+  // Show Yr 1, then roughly evenly spaced subsets to Yr 10, then terminal year. (Max 10 rows for clean fit)
+  const step = Math.max(1, Math.floor(timeHorizon / 8));
+  for(let i = 0; i < timeHorizon; i += step) {
+     ledgerRows += `
+       <tr>
+         <td style="padding: 10px 12px; border-bottom: 1px solid #e2e8f0;">Year ${projYears[i]}</td>
+         <td style="padding: 10px 12px; border-bottom: 1px solid #e2e8f0; color: #ef4444;">-${fmtFull(dragData[i])}</td>
+         <td style="padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${fmtFull(sellData[i])}</td>
+         <td style="padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-weight: 600; color: #0B2046;">${fmtFull(exchangeData[i])}</td>
+         <td style="padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace; color: #10b981;">${fmtFull(crtData[i])}</td>
+       </tr>
+     `;
+  }
 
   const pageHeader = `
     <div style="display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #0B2046; padding-bottom: 12px; margin-bottom: 25px;">
@@ -3748,6 +3856,145 @@ async function exportPDF() {
         
         <h3 style="font-size: 20px; color: #0B2046; font-weight: 600; margin-bottom: 15px;">Healthcare Bridges</h3>
         <p style="font-size: 16px; color: #334155; margin-bottom: 30px;">Early retirees transitioning prior to Medicare age (65) are exposed to extreme pre-premium cliffs. Leveraging MAGI-optimization, primarily funding distributions through Roth principal or post-tax accounts, legally retains qualification for massive ACA subsidies, averting $15,000+ in annual overheads across the gap horizon.</p>
+      </div>
+
+      <!-- PAGE 5: STRATEGY PLAYBOOK -->
+      <div style="${pageWrap}">
+        ${pageHeader}
+        <h1 style="font-size: 32px; font-weight: 300; color: #0B2046; margin: 0 0 35px 0;">Strategy Playbook Matrix</h1>
+        <p style="font-size: 16px; color: #334155; margin-bottom: 25px;">A comprehensive review of available monetization and deferral structures, mapping out primary structural advantages against liquidity and tax frictional costs.</p>
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <thead>
+            <tr>
+              <th style="padding: 16px 12px; background: #0B2046; color: white; text-align: left; font-weight: 600; width: 25%;">Strategy</th>
+              <th style="padding: 16px 12px; background: #0B2046; color: white; text-align: left; font-weight: 600; width: 40%;">Primary Advantages</th>
+              <th style="padding: 16px 12px; background: #0B2046; color: white; text-align: left; font-weight: 600; width: 35%;">Key Constraints & Watch-Outs</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #0B2046; vertical-align: top;">Direct Liquidation</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <ul style="margin: 0; padding-left: 20px; color: #334155;">
+                  <li>Immediate, unrestricted access to cash</li>
+                  <li>Zero complexity; no third-party managers</li>
+                  <li>Absolute control over reinvestment capital</li>
+                </ul>
+              </td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <ul style="margin: 0; padding-left: 20px; color: #b91c1c;">
+                  <li>Triggers immediate maximum capital gains tax</li>
+                  <li>Permanently erodes compounding baseline</li>
+                </ul>
+              </td>
+            </tr>
+            <tr style="background: #fafaf9;">
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #0B2046; vertical-align: top;">Exchange Fund (721)</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <ul style="margin: 0; padding-left: 20px; color: #334155;">
+                  <li>Defers 100% of capital gains taxes</li>
+                  <li>Instantly achieves institutional diversification</li>
+                  <li>Preserves the full gross principal for compounding</li>
+                </ul>
+              </td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <ul style="margin: 0; padding-left: 20px; color: #b91c1c;">
+                  <li>Strict 7-year illiquidity lock-up</li>
+                  <li>Costly management fees (~1.5% AUM)</li>
+                </ul>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #0B2046; vertical-align: top;">Charitable Remainder Trust</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <ul style="margin: 0; padding-left: 20px; color: #334155;">
+                  <li>Liquidates highly appreciated stock entirely tax-free</li>
+                  <li>Generates immediate charitable tax deduction</li>
+                  <li>Provides lifelong fixed or variable income streams</li>
+                </ul>
+              </td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <ul style="margin: 0; padding-left: 20px; color: #b91c1c;">
+                  <li>Irrevocable transfer: heirs do not inherit principal</li>
+                  <li>Subject to strict IRS payout formulations</li>
+                </ul>
+              </td>
+            </tr>
+            <tr style="background: #fafaf9;">
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #0B2046; vertical-align: top;">1031 DST Real Estate</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <ul style="margin: 0; padding-left: 20px; color: #334155;">
+                  <li>Swaps active management for passive, fractional real estate</li>
+                  <li>Infinite tax deferral chain until death (step-up basis)</li>
+                  <li>Yields monthly stabilized distributions</li>
+                </ul>
+              </td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <ul style="margin: 0; padding-left: 20px; color: #b91c1c;">
+                  <li>Extremely illiquid (5-10 year hold periods typically)</li>
+                  <li>Limited heavily to accredited investors only</li>
+                </ul>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #0B2046; vertical-align: top;">PPLI / SALI</td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <ul style="margin: 0; padding-left: 20px; color: #334155;">
+                  <li>Eliminates tax drag on highly tax-inefficient assets (Hedge Funds)</li>
+                  <li>Tax-free withdrawals via policy asset loans</li>
+                  <li>Completely bypasses estate taxes if held in an ILIT</li>
+                </ul>
+              </td>
+              <td style="padding: 18px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <ul style="margin: 0; padding-left: 20px; color: #b91c1c;">
+                  <li>High upfront structuring costs and mortality friction</li>
+                  <li>Requires massive capital ($5M+) to be efficient</li>
+                </ul>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- PAGE 6: ROI DEEP DIVE VISUALS -->
+      <div style="${pageWrap}">
+        ${pageHeader}
+        <h1 style="font-size: 32px; font-weight: 300; color: #0B2046; margin: 0 0 15px 0;">ROI Structural Trajectories</h1>
+        <p style="font-size: 16px; color: #334155; margin-bottom: 10px;">Geometrical compounding mapping isolating the divergence between tax friction and deferred acceleration.</p>
+        
+        ${projImgHtml}
+        
+        ${taxDragImgHtml}
+
+        <h3 style="font-size: 18px; color: #0B2046; font-weight: 600; margin: 10px 0 10px 0;">Year-by-Year Valuation Ledger</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          <thead>
+            <tr>
+              <th style="padding: 8px 12px; border-bottom: 2px solid #0f172a; color: #0f172a; text-align: left; font-weight: 600;">Year</th>
+              <th style="padding: 8px 12px; border-bottom: 2px solid #0f172a; color: #ef4444; text-align: left; font-weight: 600;">Tax Drag Frictional Cost</th>
+              <th style="padding: 8px 12px; border-bottom: 2px solid #0f172a; color: #0f172a; text-align: left; font-weight: 600;">Liquidated Baseline</th>
+              <th style="padding: 8px 12px; border-bottom: 2px solid #0f172a; color: #0B2046; text-align: left; font-weight: 600;">Deferred Exchange (721)</th>
+              <th style="padding: 8px 12px; border-bottom: 2px solid #0f172a; color: #10b981; text-align: left; font-weight: 600;">Charitable Trust (CRT)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${ledgerRows}
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- PAGE 7: INCOME & BREAKEVEN -->
+      <div style="${pageWrap}">
+        ${pageHeader}
+        <h1 style="font-size: 32px; font-weight: 300; color: #0B2046; margin: 0 0 15px 0;">Income Dynamics & Breakeven Analytics</h1>
+        <p style="font-size: 16px; color: #334155; margin-bottom: 20px;">Evaluating cash flow velocity across deferral structures and identifying exact breakeven crossover horizons relative to liquidation.</p>
+
+        <h3 style="font-size: 20px; color: #0B2046; font-weight: 600; margin: 0 0 10px 0; text-align: center;">Distribution Yield Projections</h3>
+        ${incomeImgHtml}
+
+        <h3 style="font-size: 20px; color: #0B2046; font-weight: 600; margin: 20px 0 10px 0; text-align: center;">Crossover Arbitrage Matrix</h3>
+        ${breakevenImgHtml}
       </div>
 
     </div>
