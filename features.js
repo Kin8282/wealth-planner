@@ -5,6 +5,10 @@
 
 // Chart instances for new modules
 let rothChart, rmdChart, netWorthPieChart, netWorthGrowthChart, businessSaleChart;
+let lifetimeTaxBarChart = null, lifetimeWaterfallChart = null;
+let ltStrategies = { roth:true, ss70:true, ltcg:true, qcd:true, order:true, irmaa:true };
+let ltCurrentView = 'both';
+let ltLastResults = null;
 let aiChatMessages = [];
 
 // IRS Uniform Lifetime Table for RMDs
@@ -804,4 +808,500 @@ Be concise and practical (under 300 words unless complex math needed). Lead with
 
   if (btn) { btn.disabled=false; btn.textContent='Send ↵'; }
   renderChatMessages();
+}
+
+// ============================================================
+//  LIFETIME TAX MINIMIZATION DASHBOARD
+// ============================================================
+
+function renderLifetimeTax() {
+  const c = document.getElementById('lifetime-tax-container');
+  if (!c) return;
+
+  c.innerHTML = `
+    <div class="glass-panel" style="margin-bottom:20px">
+      <div class="section-header">
+        <h2>🎯 Lifetime Tax Minimization Dashboard</h2>
+        <p class="section-desc">Your north star metric — total taxes paid from retirement to end of life, and exactly how much each strategy lever saves</p>
+      </div>
+    </div>
+
+    <div class="lt-ns-row">
+      <div class="lt-ns-card glass-panel lt-ns-baseline">
+        <div class="lt-ns-label">NO OPTIMIZATION</div>
+        <div class="lt-ns-value" id="lt-baseline-num">—</div>
+        <div class="lt-ns-sub">Baseline lifetime tax</div>
+      </div>
+      <div class="lt-ns-arrow">▶</div>
+      <div class="lt-ns-card glass-panel lt-ns-optimized">
+        <div class="lt-ns-label">WITH STRATEGIES</div>
+        <div class="lt-ns-value" id="lt-optimized-num">—</div>
+        <div class="lt-ns-sub">Selected strategies applied</div>
+      </div>
+      <div class="lt-ns-arrow">▶</div>
+      <div class="lt-ns-card glass-panel lt-ns-saved">
+        <div class="lt-ns-label">LIFETIME SAVED</div>
+        <div class="lt-ns-value lt-saved-big" id="lt-saved-num">—</div>
+        <div class="lt-ns-sub" id="lt-pct-saved">— % tax reduction</div>
+      </div>
+    </div>
+
+    <div class="glass-panel" style="margin-bottom:20px;padding:20px">
+      <div class="lt-inputs-grid">
+        <div class="input-group"><label>Retirement Age</label><div class="input-wrapper"><input type="number" id="ltRetAge" value="65" min="50" max="75" /></div></div>
+        <div class="input-group"><label>Life Expectancy</label><div class="input-wrapper"><input type="number" id="ltLifeExp" value="90" min="75" max="100" /></div></div>
+        <div class="input-group"><label>Filing Status</label><div class="input-wrapper"><select id="ltFiling"><option value="mfj">Married (MFJ)</option><option value="single">Single</option></select></div></div>
+        <div class="input-group"><label>Annual Expenses</label><div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="ltExpenses" value="120000" min="20000" step="5000" /></div></div>
+        <div class="input-group"><label>Traditional IRA/401k</label><div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="ltTradBal" value="1500000" min="0" step="50000" /></div></div>
+        <div class="input-group"><label>Roth IRA</label><div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="ltRothBalInput" value="300000" min="0" step="25000" /></div></div>
+        <div class="input-group"><label>Taxable Brokerage</label><div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="ltTaxableBal" value="500000" min="0" step="50000" /></div></div>
+        <div class="input-group"><label>Taxable Gain %</label><div class="input-wrapper"><input type="number" id="ltGainPct" value="60" min="0" max="95" step="5" /><span class="input-suffix">%</span></div></div>
+        <div class="input-group"><label>SS Benefit (mo.)</label><div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="ltSSBenefit" value="3500" min="0" step="100" /></div></div>
+        <div class="input-group"><label>Pension (annual)</label><div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="ltPension" value="0" min="0" step="5000" /></div></div>
+        <div class="input-group"><label>Roth Conv./Year</label><div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="ltRothConv" value="50000" min="0" step="5000" /></div></div>
+        <div class="input-group"><label>QCD/Year (age 70+)</label><div class="input-wrapper"><span class="input-prefix">$</span><input type="number" id="ltQCD" value="15000" min="0" step="1000" /></div></div>
+      </div>
+    </div>
+
+    <div class="lt-strat-grid">
+      ${[
+        ['roth',  '🔄', 'Roth Conversion',    'Convert trad→Roth in low-tax window before RMDs hit'],
+        ['ss70',  '📅', 'Delay SS to Age 70', '8%/yr increase; reduces SS+RMD tax torpedo overlap'],
+        ['ltcg',  '📈', 'LTCG Harvesting',    'Sell appreciated assets in 0% bracket, reset basis'],
+        ['qcd',   '🎁', 'QCD Giving',          'Route RMDs to charity — never hits taxable income'],
+        ['order', '🗂️', 'Optimal Withdrawal', 'Taxable→Traditional→Roth preserves tax-free growth'],
+        ['irmaa', '🏥', 'IRMAA Guard',         'Cap income below Medicare surcharge thresholds'],
+      ].map(([key,icon,name,desc]) => `
+        <div class="lt-strat-card active" id="lts-${key}" onclick="toggleLTStrategy('${key}',this)">
+          <div class="lt-strat-top"><span class="lt-strat-icon">${icon}</span><span class="lt-strat-dot on" id="lts-dot-${key}"></span></div>
+          <div class="lt-strat-name">${name}</div>
+          <div class="lt-strat-desc">${desc}</div>
+          <div class="lt-strat-saving" id="lts-saving-${key}">calculating…</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="lt-charts-row">
+      <div class="glass-panel chart-panel" style="flex:2;min-width:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <h3 class="chart-title" style="margin:0">Annual Tax Bill — Retirement to End of Life</h3>
+          <div style="display:flex;gap:12px">
+            ${['baseline','optimized','both'].map(v=>`<label style="font-size:0.72rem;cursor:pointer;display:flex;align-items:center;gap:4px;color:var(--text-secondary)"><input type="radio" name="ltView" value="${v}" ${v==='both'?'checked':''}> ${v[0].toUpperCase()+v.slice(1)}</label>`).join('')}
+          </div>
+        </div>
+        <div class="chart-container" style="height:300px"><canvas id="ltTaxByYearChart"></canvas></div>
+      </div>
+      <div class="glass-panel chart-panel" style="flex:1;min-width:240px">
+        <h3 class="chart-title">Tax Saved Per Strategy</h3>
+        <div class="chart-container" style="height:300px"><canvas id="ltWaterfallChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="lt-bottom-row">
+      <div class="glass-panel" style="flex:1;min-width:0">
+        <h3 class="chart-title" style="margin-bottom:14px">Lifetime Tax by Phase</h3>
+        <div id="lt-phase-table"></div>
+      </div>
+      <div id="lt-torpedo-box" class="lt-torpedo-box glass-panel" style="flex:1;min-width:0;display:none"></div>
+    </div>
+  `;
+
+  ltStrategies = { roth:true, ss70:true, ltcg:true, qcd:true, order:true, irmaa:true };
+  ltCurrentView = 'both';
+
+  document.querySelectorAll('input[name="ltView"]').forEach(el => {
+    el.addEventListener('change', () => { ltCurrentView = el.value; renderLTCharts(); });
+  });
+
+  ['ltRetAge','ltLifeExp','ltFiling','ltExpenses','ltTradBal','ltRothBalInput',
+   'ltTaxableBal','ltGainPct','ltSSBenefit','ltPension','ltRothConv','ltQCD']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', debounce(runLTModel, 300));
+    });
+
+  runLTModel();
+}
+
+function toggleLTStrategy(key, el) {
+  ltStrategies[key] = !ltStrategies[key];
+  el.classList.toggle('active', ltStrategies[key]);
+  const dot = document.getElementById('lts-dot-' + key);
+  if (dot) { dot.className = 'lt-strat-dot ' + (ltStrategies[key] ? 'on' : 'off'); }
+  runLTModel();
+}
+
+function getLTInputs() {
+  const n = id => parseFloat(document.getElementById(id)?.value) || 0;
+  const s = id => document.getElementById(id)?.value || '';
+  return {
+    retAge:       parseInt(document.getElementById('ltRetAge')?.value)  || 65,
+    lifeExp:      parseInt(document.getElementById('ltLifeExp')?.value) || 90,
+    filing:       s('ltFiling') || 'mfj',
+    expenses:     n('ltExpenses')    || 120000,
+    tradBal:      n('ltTradBal'),
+    rothBal:      n('ltRothBalInput'),
+    taxableBal:   n('ltTaxableBal'),
+    gainPct:      n('ltGainPct') / 100,
+    ssBenefit:    n('ltSSBenefit'),
+    pension:      n('ltPension'),
+    rothConvAmt:  n('ltRothConv'),
+    qcdAmt:       n('ltQCD'),
+    annualReturn: (parseFloat(document.getElementById('annualReturn')?.value) || 7) / 100,
+  };
+}
+
+function ltFedTax(ordIncome, filing, yrOff) {
+  const inf = Math.pow(1.025, yrOff);
+  const std = (filing === 'mfj' ? 29200 : 14600) * inf;
+  const inc = Math.max(0, ordIncome - std);
+  const br  = filing === 'mfj'
+    ? [[0.10,23200],[0.12,94300],[0.22,201050],[0.24,383900],[0.32,487450],[0.35,731200],[0.37,Infinity]]
+    : [[0.10,11600],[0.12,47150],[0.22,100525],[0.24,191950],[0.32,243725],[0.35,609350],[0.37,Infinity]];
+  let tax = 0, prev = 0;
+  for (const [rate, top] of br) {
+    const t = top === Infinity ? Infinity : top * inf;
+    if (inc <= prev) break;
+    tax += (Math.min(inc, t) - prev) * rate;
+    prev = t;
+  }
+  return Math.round(tax);
+}
+
+function ltIRMAA(prevMAGI, filing, yrOff) {
+  const inf = Math.pow(1.02, yrOff);
+  const tiers = filing === 'mfj'
+    ? [[206000,0],[258000,1678],[322000,4194],[386000,6709],[750000,9224],[Infinity,10072]]
+    : [[103000,0],[129000,839],[161000,2097],[193000,3354],[500000,4612],[Infinity,5036]];
+  let s = 0;
+  for (const [thresh, amt] of tiers) {
+    if (prevMAGI <= thresh * inf) break;
+    s = amt;
+  }
+  return Math.round(s);
+}
+
+function ltSSTaxable(ssAnnual, otherIncome, filing) {
+  const prov = otherIncome + ssAnnual * 0.5;
+  const [t1, t2] = filing === 'mfj' ? [32000, 44000] : [25000, 34000];
+  if (prov <= t1) return 0;
+  if (prov <= t2) return Math.min(ssAnnual * 0.5, (prov - t1) * 0.5);
+  return Math.min(ssAnnual * 0.85, (t2 - t1) * 0.25 + (prov - t2) * 0.85);
+}
+
+function ltRunProjection(p, strats) {
+  const { retAge, lifeExp, filing, expenses, tradBal, rothBal,
+          taxableBal, gainPct, ssBenefit, pension,
+          rothConvAmt, qcdAmt, annualReturn } = p;
+
+  const ssClaimAge = strats.ss70 ? 70 : 67;
+  const ssAnnual   = ssBenefit * 12 * (strats.ss70 ? 1.24 : 1.0);
+  const rmdStart   = 73;
+
+  let trad    = tradBal;
+  let roth    = rothBal;
+  let taxable = taxableBal;
+  let gRatio  = Math.min(0.97, gainPct);
+  let prevMAGI = expenses;
+
+  const rows = [];
+
+  for (let age = retAge; age <= lifeExp; age++) {
+    const yr    = age - retAge;
+    const inRMD = age >= rmdStart;
+    const hasSS = age >= ssClaimAge;
+    const inConv = !inRMD && strats.roth && trad > 0;
+
+    const ssIncome   = hasSS ? ssAnnual : 0;
+    const pensionInc = pension;
+    const guaranteed = ssIncome + pensionInc;
+
+    // RMD
+    let rmdReq = inRMD && trad > 0 ? trad / getRMDFactor(Math.min(age, 100)) : 0;
+
+    // QCD offsets RMD
+    let qcdUsed = 0;
+    if (strats.qcd && age >= 70 && rmdReq > 0) {
+      qcdUsed = Math.min(qcdAmt, rmdReq, trad);
+    }
+    const taxableRMD = Math.max(0, rmdReq - qcdUsed);
+
+    // Roth conversion
+    let rothConv = inConv ? Math.min(rothConvAmt, trad) : 0;
+
+    // IRMAA guard: back off conversion if it breaches tier 1
+    if (strats.irmaa && rothConv > 0) {
+      const infF    = Math.pow(1.02, yr);
+      const tier1   = (filing === 'mfj' ? 206000 : 103000) * infF;
+      const estOrd  = taxableRMD + rothConv + pensionInc + ssAnnual * 0.85;
+      if (estOrd > tier1) rothConv = Math.max(0, rothConv - (estOrd - tier1));
+    }
+
+    // Withdrawals to cover expenses
+    let tradPull  = taxableRMD + rothConv;
+    let rothPull  = 0;
+    let taxPull   = 0;
+    let gainsSold = 0;
+    let rem       = Math.max(0, expenses - guaranteed - taxableRMD - rothConv);
+
+    if (strats.order) {
+      // Taxable → Trad → Roth
+      if (rem > 0 && taxable > 0) {
+        taxPull   = Math.min(rem, taxable);
+        gainsSold = taxPull * gRatio;
+        taxable  -= taxPull;
+        rem      -= taxPull;
+      }
+      if (rem > 0 && trad > tradPull) {
+        const x = Math.min(rem, trad - tradPull);
+        tradPull += x;  rem -= x;
+      }
+      if (rem > 0 && roth > 0) rothPull = Math.min(rem, roth);
+    } else {
+      // Trad → Roth → Taxable
+      if (rem > 0 && trad > tradPull) {
+        const x = Math.min(rem, trad - tradPull);
+        tradPull += x;  rem -= x;
+      }
+      if (rem > 0 && roth > 0) { rothPull = Math.min(rem, roth); rem -= rothPull; }
+      if (rem > 0 && taxable > 0) {
+        taxPull   = Math.min(rem, taxable);
+        gainsSold = taxPull * gRatio;
+        taxable  -= taxPull;
+      }
+    }
+
+    // LTCG Harvesting — harvest unrealized gains in 0% bracket
+    if (strats.ltcg && taxable > 0 && gRatio > 0) {
+      const infF   = Math.pow(1.025, yr);
+      const std    = (filing === 'mfj' ? 29200 : 14600) * infF;
+      const zero   = (filing === 'mfj' ? 94050 : 47025) * infF;
+      const ssT    = ltSSTaxable(ssIncome, tradPull + pensionInc, filing);
+      const ordEst = Math.max(0, tradPull + pensionInc + ssT - std);
+      const room   = Math.max(0, zero - ordEst);
+      const harv   = Math.min(room, taxable * gRatio);
+      if (harv > 0) gRatio = Math.max(0, (taxable * gRatio - harv) / taxable);
+    }
+
+    // Tax computation
+    const ssTax    = ltSSTaxable(ssIncome, tradPull + pensionInc, filing);
+    const ordInc   = tradPull + pensionInc + ssTax;
+    const incomeTax = ltFedTax(ordInc, filing, yr);
+
+    const infF2    = Math.pow(1.025, yr);
+    const std2     = (filing === 'mfj' ? 29200 : 14600) * infF2;
+    const zero2    = (filing === 'mfj' ? 94050 : 47025) * infF2;
+    const ordForCG = Math.max(0, ordInc - std2);
+    const gainsTaxed = Math.max(0, gainsSold - Math.max(0, zero2 - ordForCG));
+    const cgTax    = Math.round(gainsTaxed * 0.15);
+
+    const irmaaCost = age >= 65 ? ltIRMAA(prevMAGI, filing, yr) : 0;
+    prevMAGI = tradPull + pensionInc + ssIncome + gainsSold;
+
+    const totalTax = incomeTax + cgTax + irmaaCost;
+
+    // Update balances
+    trad    = Math.max(0, trad - tradPull - qcdUsed) * (1 + annualReturn);
+    roth    = Math.max(0, roth - rothPull + rothConv) * (1 + annualReturn);
+    const newTaxGains = taxable * annualReturn;
+    const taxableGrew = taxable * (1 + annualReturn);
+    gRatio = taxable > 0
+      ? Math.min(0.97, (taxable * gRatio + newTaxGains) / taxableGrew)
+      : gRatio;
+    taxable = taxableGrew;
+
+    rows.push({
+      age, incomeTax, cgTax, irmaaCost, totalTax,
+      tradBal: Math.round(trad), rothBal: Math.round(roth),
+    });
+  }
+
+  const total    = rows.reduce((s, r) => s + r.totalTax, 0);
+  const incTax   = rows.reduce((s, r) => s + r.incomeTax, 0);
+  const cgTaxSum = rows.reduce((s, r) => s + r.cgTax, 0);
+  const irmaaSum = rows.reduce((s, r) => s + r.irmaaCost, 0);
+  return { rows, total, incTax, cgTaxSum, irmaaSum };
+}
+
+function runLTModel() {
+  const p = getLTInputs();
+  const none = { roth:false, ss70:false, ltcg:false, qcd:false, order:false, irmaa:false };
+  const baseline  = ltRunProjection(p, none);
+  const optimized = ltRunProjection(p, ltStrategies);
+
+  const saved = baseline.total - optimized.total;
+  const pct   = baseline.total > 0 ? (saved / baseline.total * 100) : 0;
+
+  const el = id => document.getElementById(id);
+  if (el('lt-baseline-num'))  el('lt-baseline-num').textContent  = fmtFull(baseline.total);
+  if (el('lt-optimized-num')) el('lt-optimized-num').textContent = fmtFull(optimized.total);
+  if (el('lt-saved-num'))     el('lt-saved-num').textContent     = fmtFull(Math.max(0, saved));
+  if (el('lt-pct-saved'))     el('lt-pct-saved').textContent     = pct.toFixed(1) + '% tax reduction';
+
+  // Individual strategy savings
+  const stratKeys = ['roth','ss70','ltcg','qcd','order','irmaa'];
+  const stratSavings = {};
+  for (const key of stratKeys) {
+    const r = ltRunProjection(p, { ...none, [key]: true });
+    stratSavings[key] = baseline.total - r.total;
+    const sv = document.getElementById('lts-saving-' + key);
+    if (sv) {
+      const v = stratSavings[key];
+      sv.textContent = v > 500 ? 'saves ' + fmtFull(v) : (v < -500 ? 'costs ' + fmtFull(-v) : 'minimal impact');
+      sv.style.color = v > 500 ? '#10b981' : (v < -500 ? '#ef4444' : '#94a3b8');
+    }
+  }
+
+  ltLastResults = { baseline, optimized, stratSavings, retAge: p.retAge };
+  renderLTPhaseTable(baseline, optimized, p.retAge);
+  checkLTTorpedo(baseline, p);
+  renderLTCharts();
+}
+
+function renderLTPhaseTable(baseline, optimized, retAge) {
+  const box = document.getElementById('lt-phase-table');
+  if (!box) return;
+  const bConv = baseline.rows.filter(r => r.age < 73).reduce((s,r)=>s+r.totalTax,0);
+  const bRMD  = baseline.rows.filter(r => r.age >= 73).reduce((s,r)=>s+r.totalTax,0);
+  const oConv = optimized.rows.filter(r => r.age < 73).reduce((s,r)=>s+r.totalTax,0);
+  const oRMD  = optimized.rows.filter(r => r.age >= 73).reduce((s,r)=>s+r.totalTax,0);
+
+  box.innerHTML = `
+    <table class="lt-phase-tbl">
+      <thead><tr><th>Phase</th><th>Ages</th><th>Baseline</th><th>Optimized</th><th>Saved</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Conversion Window</td><td>${retAge}–72</td>
+          <td>${fmtFull(bConv)}</td>
+          <td class="lt-opt-cell">${fmtFull(oConv)}</td>
+          <td class="lt-save-cell">${fmtFull(bConv - oConv)}</td>
+        </tr>
+        <tr>
+          <td>RMD Years</td><td>73+</td>
+          <td>${fmtFull(bRMD)}</td>
+          <td class="lt-opt-cell">${fmtFull(oRMD)}</td>
+          <td class="lt-save-cell">${fmtFull(bRMD - oRMD)}</td>
+        </tr>
+        <tr class="lt-total-row">
+          <td><strong>Total Lifetime</strong></td><td>—</td>
+          <td><strong>${fmtFull(baseline.total)}</strong></td>
+          <td class="lt-opt-cell"><strong>${fmtFull(optimized.total)}</strong></td>
+          <td class="lt-save-cell"><strong>${fmtFull(baseline.total - optimized.total)}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:10px;font-size:0.7rem;color:var(--text-muted)">
+      Optimized breakdown — Income tax: ${fmtFull(optimized.incTax)} · Cap gains: ${fmtFull(optimized.cgTaxSum)} · IRMAA: ${fmtFull(optimized.irmaaSum)}
+    </div>`;
+}
+
+function checkLTTorpedo(baseline, p) {
+  const box = document.getElementById('lt-torpedo-box');
+  if (!box) return;
+  const convRows = baseline.rows.filter(r => r.age < 73);
+  const rmdRows  = baseline.rows.filter(r => r.age >= 73);
+  if (!rmdRows.length || !convRows.length) { box.style.display = 'none'; return; }
+  const convAvg = convRows.reduce((s,r)=>s+r.totalTax,0) / convRows.length;
+  const rmdAvg  = rmdRows.reduce((s,r)=>s+r.totalTax,0)  / rmdRows.length;
+  const peakRow = baseline.rows.reduce((a,b) => b.totalTax > a.totalTax ? b : a);
+
+  if (rmdAvg > convAvg * 1.4) {
+    box.style.display = 'block';
+    box.innerHTML = `
+      <h3 class="chart-title" style="margin-bottom:10px;color:#f59e0b">⚠️ Tax Torpedo Detected</h3>
+      <p style="font-size:0.8rem;line-height:1.65;color:var(--text-secondary)">
+        RMD-phase taxes average <strong style="color:#ef4444">${fmtFull(Math.round(rmdAvg))}/yr</strong> — 
+        ${((rmdAvg/convAvg-1)*100).toFixed(0)}% higher than conversion-window average of 
+        <strong>${fmtFull(Math.round(convAvg))}/yr</strong>.
+        Peak year: <strong>age ${peakRow.age}</strong> at <strong style="color:#ef4444">${fmtFull(peakRow.totalTax)}</strong>.
+      </p>
+      <p style="font-size:0.78rem;line-height:1.6;color:var(--text-muted);margin-top:8px">
+        RMDs, Social Security taxation (up to 85% included), and IRMAA surcharges collide simultaneously.
+        Roth conversions <em>before age 73</em> are the primary antidote — each $1 converted now eliminates
+        the future RMD and its cascading tax effects.
+      </p>`;
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+function renderLTCharts() {
+  if (!ltLastResults) return;
+  const { baseline, optimized, stratSavings } = ltLastResults;
+  const ages = baseline.rows.map(r => r.age);
+
+  // Annual tax chart
+  if (lifetimeTaxBarChart) { lifetimeTaxBarChart.destroy(); lifetimeTaxBarChart = null; }
+  const ctx1 = document.getElementById('ltTaxByYearChart');
+  if (!ctx1) return;
+
+  let datasets, chartType;
+  if (ltCurrentView === 'baseline') {
+    chartType = 'bar';
+    datasets = [
+      { label:'Income Tax',    data: baseline.rows.map(r=>r.incomeTax),  backgroundColor:'rgba(239,68,68,0.75)',  stack:'b' },
+      { label:'Cap Gains Tax', data: baseline.rows.map(r=>r.cgTax),      backgroundColor:'rgba(245,158,11,0.75)', stack:'b' },
+      { label:'IRMAA',         data: baseline.rows.map(r=>r.irmaaCost),  backgroundColor:'rgba(139,92,246,0.75)', stack:'b' },
+    ];
+  } else if (ltCurrentView === 'optimized') {
+    chartType = 'bar';
+    datasets = [
+      { label:'Income Tax',    data: optimized.rows.map(r=>r.incomeTax), backgroundColor:'rgba(16,185,129,0.75)', stack:'o' },
+      { label:'Cap Gains Tax', data: optimized.rows.map(r=>r.cgTax),     backgroundColor:'rgba(99,102,241,0.75)', stack:'o' },
+      { label:'IRMAA',         data: optimized.rows.map(r=>r.irmaaCost), backgroundColor:'rgba(59,130,246,0.75)', stack:'o' },
+    ];
+  } else {
+    chartType = 'line';
+    datasets = [
+      { label:'Baseline',  data: baseline.rows.map(r=>r.totalTax),  borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,0.12)', fill:true, tension:0.3, pointRadius:0, borderWidth:2.5 },
+      { label:'Optimized', data: optimized.rows.map(r=>r.totalTax), borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.12)', fill:true, tension:0.3, pointRadius:0, borderWidth:2.5 },
+    ];
+  }
+
+  lifetimeTaxBarChart = new Chart(ctx1, {
+    type: chartType,
+    data: { labels: ages, datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:false,
+      scales: {
+        x: { stacked: chartType==='bar', ticks:{ color:'#94a3b8', font:{size:11} }, grid:{ color:'rgba(255,255,255,0.05)' } },
+        y: { stacked: chartType==='bar', ticks:{ color:'#94a3b8', font:{size:11}, callback: v=>'$'+(v>=1000?Math.round(v/1000)+'k':v) }, grid:{ color:'rgba(255,255,255,0.05)' } }
+      },
+      plugins: {
+        legend: { labels:{ color:'#cbd5e1', font:{size:11} } },
+        tooltip: { callbacks:{ label: ctx=>' '+ctx.dataset.label+': '+fmtFull(ctx.parsed.y) } }
+      }
+    }
+  });
+
+  // Strategy savings bar (horizontal)
+  if (lifetimeWaterfallChart) { lifetimeWaterfallChart.destroy(); lifetimeWaterfallChart = null; }
+  const ctx2 = document.getElementById('ltWaterfallChart');
+  if (!ctx2) return;
+
+  const stratLabels = { roth:'Roth Conv.', ss70:'SS Delay to 70', ltcg:'LTCG Harvesting', qcd:'QCD Giving', order:'Withdrawal Order', irmaa:'IRMAA Guard' };
+  const sKeys  = Object.keys(stratSavings).sort((a,b) => stratSavings[b] - stratSavings[a]);
+  const sVals  = sKeys.map(k => Math.round(stratSavings[k] / 1000));
+  const sColors = sVals.map(v => v >= 0 ? 'rgba(16,185,129,0.8)' : 'rgba(239,68,68,0.7)');
+
+  lifetimeWaterfallChart = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: sKeys.map(k => stratLabels[k]),
+      datasets: [{ label:'Tax Saved ($k)', data:sVals, backgroundColor:sColors, borderRadius:5 }]
+    },
+    options: {
+      indexAxis:'y', responsive:true, maintainAspectRatio:false, animation:false,
+      scales: {
+        x: { ticks:{ color:'#94a3b8', font:{size:11}, callback:v=>'$'+v+'k' }, grid:{ color:'rgba(255,255,255,0.05)' } },
+        y: { ticks:{ color:'#cbd5e1', font:{size:11} }, grid:{ color:'rgba(255,255,255,0.03)' } }
+      },
+      plugins: {
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label: ctx => {
+          const v = ctx.parsed.x;
+          return v >= 0 ? ' Saves $'+Math.abs(v)+'k' : ' Costs $'+Math.abs(v)+'k';
+        }}}
+      }
+    }
+  });
 }

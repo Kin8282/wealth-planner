@@ -396,6 +396,7 @@ function rebuildCurrentTab(tab) {
     case 'businesssale': renderBusinessSale(); break;
     case 'yearend':      renderYearEndChecklist(); break;
     case 'compare':      renderScenarioComparison(); break;
+    case 'lifetimetax':  renderLifetimeTax(); break;
     case 'aichat':       renderAIChat(); break;
   }
 }
